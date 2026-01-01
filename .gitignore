@@ -1,0 +1,52 @@
+# Build directories
+build/
+cmake-build-*/
+out/
+
+# Qt generated files
+moc_*
+ui_*
+qrc_*
+*.autosave
+
+# Compiled objects
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.dylib
+
+# Executables
+BTHL-SpiritBox
+*.exe
+*.app
+
+# IDE files
+.idea/
+.vscode/
+*.xcodeproj/
+*.xcworkspace/
+.DS_Store
+
+# whisper.cpp submodule models (large binary files)
+lib/whisper.cpp/models/*.bin
+
+# Session recordings (user data)
+sessions/
+*.wav
+*.jsonl
+
+# Whisper models (download separately)
+models/
+*.bin
+
+# Environment / Secrets
+.env
+*.pem
+*.key
+
+# macOS
+._*
+.claude/
+lib/whisper.cpp/

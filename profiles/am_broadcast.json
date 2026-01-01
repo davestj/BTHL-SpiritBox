@@ -1,0 +1,19 @@
+{
+    "name": "AM Broadcast",
+    "description": "We scan the AM broadcast band (530 kHz - 1700 kHz) with 10 kHz steps",
+    "dwell_time_ms": 50,
+    "audio_sample_rate": 16000,
+    "sdr_sample_rate": 2400000.0,
+    "gain": 0.0,
+    "bidirectional": false,
+    "randomized": false,
+    "bands": [
+        {
+            "start_freq_hz": 530000.0,
+            "stop_freq_hz": 1700000.0,
+            "step_size_hz": 10000.0,
+            "demod_mode": 0,
+            "bandwidth_hz": 10000.0
+        }
+    ]
+}
