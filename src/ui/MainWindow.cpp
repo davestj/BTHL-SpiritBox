@@ -55,11 +55,6 @@ MainWindow::MainWindow(QWidget* parent)
     wireSignals();
     loadDefaultProfile();
 
-    // We initialize the audio output system
-    if (!m_audioOutput->initialize(16000, 256)) {
-        qWarning() << "MainWindow: We could not initialize audio output";
-    }
-
     qInfo() << "MainWindow: We initialized BTHL-SpiritBox application";
 
     /// We auto-detect SDR devices on startup and open the first one found
@@ -240,10 +235,13 @@ void MainWindow::createControlDock() {
     auto* profileGroup = new QGroupBox("Sweep Profile");
     auto* profileLayout = new QVBoxLayout(profileGroup);
     m_profileCombo = new QComboBox();
+    m_profileCombo->blockSignals(true);
     m_profileCombo->addItem("AM Broadcast (530-1700 kHz)");
     m_profileCombo->addItem("FM Broadcast (88-108 MHz)");
     m_profileCombo->addItem("VHF Low Band (30-88 MHz)");
     m_profileCombo->addItem("Full Spectrum (AM+VHF+FM)");
+    m_profileCombo->setCurrentIndex(1);  // FM default
+    m_profileCombo->blockSignals(false);
     connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &MainWindow::onProfileChanged);
     profileLayout->addWidget(m_profileCombo);
@@ -527,17 +525,14 @@ void MainWindow::wireSignals() {
 }
 
 void MainWindow::loadDefaultProfile() {
-    /// We load FM Broadcast by default — AM (530 kHz) is below E4000 tuner min (52 MHz)
-    /// We block signals to prevent onProfileChanged from re-triggering during init
-    m_profileCombo->blockSignals(true);
-    m_profileCombo->setCurrentIndex(1);  // FM is index 1
-    m_profileCombo->blockSignals(false);
-
+    /// We load FM Broadcast by default — AM is below E4000 tuner range (52 MHz min)
     auto fmProfile = SweepProfile::createFMBroadcast();
     m_sweepEngine->setProfile(fmProfile);
     m_demodulator->setAudioSampleRate(fmProfile.audioSampleRate());
     m_demodulator->setSdrSampleRate(fmProfile.sdrSampleRate());
-    m_audioOutput->initialize(fmProfile.audioSampleRate(), 512);
+    if (!m_audioOutput->initialize(fmProfile.audioSampleRate(), 512)) {
+        qWarning() << "MainWindow: We could not initialize audio output";
+    }
 }
 
 // ─── Slot Implementations ──────────────────────────────────────────────────────
