@@ -27,5 +27,11 @@
     <!-- Required so the investigator microphone (Interactive capture mode) can be used. -->
     <key>NSMicrophoneUsageDescription</key>
     <string>BTHL-SpiritBox records the investigator's spoken questions so they can be transcribed alongside captured responses during an EVP session.</string>
+    <!-- Bluetooth: scan nearby BLE devices as an ambient-RF environmental sensor. -->
+    <key>NSBluetoothAlwaysUsageDescription</key>
+    <string>BTHL-SpiritBox scans for nearby Bluetooth devices as an environmental radio-presence sensor during an investigation.</string>
+    <!-- Location: macOS requires it to scan Wi-Fi access points / read SSIDs. -->
+    <key>NSLocationWhenInUseUsageDescription</key>
+    <string>BTHL-SpiritBox scans nearby Wi-Fi access points as an environmental radio-presence sensor; macOS requires location access to enumerate Wi-Fi networks.</string>
 </dict>
 </plist>

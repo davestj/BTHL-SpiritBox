@@ -11,7 +11,15 @@
     <title>BTHL-SpiritBox</title>
     <organization>com.beyondthehorizonlabs</organization>
     <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
-    <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+    <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
+
+    <!-- Custom installer branding (files supplied via productbuild --resources). The postinstall
+         script (in the component pkg) auto-launches the app on completion. -->
+    <background file="installer-bg.png" alignment="bottomleft" scaling="none"/>
+    <background-darkAqua file="installer-bg.png" alignment="bottomleft" scaling="none"/>
+    <welcome file="welcome.html"/>
+    <license file="license.txt"/>
+    <conclusion file="conclusion.html"/>
 
     <choices-outline>
         <line choice="default">
@@ -22,5 +30,5 @@
     <choice id="com.beyondthehorizonlabs.spiritbox" visible="false">
         <pkg-ref id="com.beyondthehorizonlabs.spiritbox"/>
     </choice>
-    <pkg-ref id="com.beyondthehorizonlabs.spiritbox" version="1.1.1" onConclusion="none">BTHL-SpiritBox-component.pkg</pkg-ref>
+    <pkg-ref id="com.beyondthehorizonlabs.spiritbox" version="1.1.2" onConclusion="none">BTHL-SpiritBox-component.pkg</pkg-ref>
 </installer-gui-script>

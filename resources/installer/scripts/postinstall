@@ -1,0 +1,13 @@
+#!/bin/bash
+#
+# postinstall — launch BTHL-SpiritBox after a successful install.
+#
+# macOS's Installer has no native "launch after install" checkbox (that's a third-party-builder
+# feature), so we auto-open the app on completion, which is the standard equivalent. For a
+# per-user (currentUserHome) install, this runs as the logged-in user, so $HOME is correct.
+#
+APP="$HOME/Applications/BTHL/BTHL-SpiritBox/BTHL-SpiritBox.app"
+if [ -d "$APP" ]; then
+    /usr/bin/open "$APP" || true
+fi
+exit 0

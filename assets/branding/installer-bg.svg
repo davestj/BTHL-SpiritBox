@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  macOS Installer background (620x418) — the branded canvas shown behind the installer panes.
+  Same REM-pod / radio-wave motif as the app icon and splash. Rasterized to installer-bg.png
+  by generate-assets.sh and referenced from resources/distribution.xml.
+-->
+<svg width="620" height="418" viewBox="0 0 620 418" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="ibg" cx="28%" cy="32%" r="95%">
+      <stop offset="0%"  stop-color="#1b2347"/>
+      <stop offset="55%" stop-color="#0d1226"/>
+      <stop offset="100%" stop-color="#04050c"/>
+    </radialGradient>
+    <linearGradient id="igold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe27a"/><stop offset="100%" stop-color="#d39a00"/>
+    </linearGradient>
+    <radialGradient id="iorb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#eafdff"/><stop offset="40%" stop-color="#5ff0ff"/>
+      <stop offset="100%" stop-color="#0bb6cf"/>
+    </radialGradient>
+    <filter id="iglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="5" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="620" height="418" fill="url(#ibg)"/>
+
+  <!-- Emblem, lower-left so it sits clear of the installer's left pane text -->
+  <g transform="translate(120,300)" opacity="0.9">
+    <g fill="none" stroke-linecap="round" filter="url(#iglow)">
+      <circle r="46" stroke="#36e0e0" stroke-opacity="0.8" stroke-width="6"/>
+      <circle r="80" stroke="#36e0e0" stroke-opacity="0.4" stroke-width="5"/>
+      <circle r="116" stroke="#ffd700" stroke-opacity="0.22" stroke-width="4"/>
+    </g>
+    <rect x="-7" y="0" width="14" height="96" rx="7" fill="url(#igold)" filter="url(#iglow)"/>
+    <path d="M-46 96 q46 -26 92 0 q5 36 -46 36 q-51 0 -46 -36 z" fill="url(#igold)" filter="url(#iglow)"/>
+    <circle r="26" fill="url(#iorb)" filter="url(#iglow)"/>
+  </g>
+
+  <!-- Wordmark, top -->
+  <text x="40" y="60" font-family="Helvetica, Arial, sans-serif" font-size="34" font-weight="800"
+        fill="#ffffff">BTHL<tspan fill="#ffd700">·</tspan>SpiritBox</text>
+  <text x="42" y="86" font-family="Helvetica, Arial, sans-serif" font-size="13" font-weight="600"
+        fill="#36e0e0" letter-spacing="2">PARANORMAL INVESTIGATION COMMAND CENTER</text>
+  <text x="42" y="110" font-family="Helvetica, Arial, sans-serif" font-size="12"
+        fill="#9aa6c8">Beyond The Horizon Labs</text>
+</svg>

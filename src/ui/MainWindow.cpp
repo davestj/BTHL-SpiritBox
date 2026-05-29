@@ -163,6 +163,21 @@ MainWindow::MainWindow(QWidget* parent)
     /// We quietly check bthlcorp.com for a newer release shortly after launch (only prompts if
     /// an update is actually available).
     QTimer::singleShot(4000, this, [this]() { onCheckForUpdates(true); });
+
+#ifdef __APPLE__
+    /// We scan the ambient Wi-Fi + Bluetooth-LE environment as an extra RF-presence sensor and
+    /// show live counts in the status bar. (First use prompts for Bluetooth + Location.)
+    m_wireless = std::make_unique<WirelessScanner>();
+    connect(m_wireless.get(), &WirelessScanner::snapshot, this,
+            [this](const WirelessSnapshot& s) {
+                const QString wifi = s.wifiAvailable
+                    ? QString("Wi-Fi %1").arg(s.wifiCount) : QStringLiteral("Wi-Fi —");
+                const QString bt = s.btAvailable
+                    ? QString("BT %1").arg(s.btCount) : QStringLiteral("BT —");
+                m_statusWireless->setText("RF: " + wifi + " · " + bt);
+            });
+    QTimer::singleShot(6000, this, [this]() { if (m_wireless) m_wireless->start(5000); });
+#endif
 }
 
 MainWindow::~MainWindow() {
@@ -527,12 +542,14 @@ void MainWindow::createStatusBar() {
     m_statusVAD = new QLabel("VAD: Idle");
     m_statusRecording = new QLabel("REC: Off");
     m_statusMode = new QLabel("MODE: Standalone");
+    m_statusWireless = new QLabel("RF: —");
 
     statusBar()->addPermanentWidget(m_statusFreq);
     statusBar()->addPermanentWidget(m_statusEMF);
     statusBar()->addPermanentWidget(m_statusVAD);
     statusBar()->addPermanentWidget(m_statusRecording);
     statusBar()->addPermanentWidget(m_statusMode);
+    statusBar()->addPermanentWidget(m_statusWireless);
 
     m_statusTimer = new QTimer(this);
     connect(m_statusTimer, &QTimer::timeout, this, &MainWindow::onUpdateStatusBar);

@@ -11,7 +11,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(BTHL-SpiritBox
-    VERSION 1.1.1
+    VERSION 1.1.2
     DESCRIPTION "Multi-sensor paranormal audio detection and transcription system"
     LANGUAGES CXX
 )
@@ -158,6 +158,10 @@ set(SENSOR_SOURCES
     src/sensors/SensorDevice.cpp
     src/sensors/USBDeviceManager.cpp
 )
+# macOS Wi-Fi (CoreWLAN) + Bluetooth-LE (CoreBluetooth) environmental scanner is Obj-C++.
+if(APPLE)
+    list(APPEND SENSOR_SOURCES src/sensors/WirelessScanner.mm)
+endif()
 
 set(HUB_SOURCES
     src/hub/SensorHub.cpp
@@ -250,10 +254,16 @@ if(APPLE)
     find_library(COREAUDIO_LIB CoreAudio REQUIRED)
     find_library(AUDIOUNIT_LIB AudioUnit REQUIRED)
     find_library(AUDIOTOOLBOX_LIB AudioToolbox REQUIRED)
+    find_library(COREWLAN_LIB CoreWLAN REQUIRED)
+    find_library(COREBLUETOOTH_LIB CoreBluetooth REQUIRED)
+    find_library(FOUNDATION_LIB Foundation REQUIRED)
     target_link_libraries(${PROJECT_NAME} PRIVATE
         ${COREAUDIO_LIB}
         ${AUDIOUNIT_LIB}
         ${AUDIOTOOLBOX_LIB}
+        ${COREWLAN_LIB}
+        ${COREBLUETOOTH_LIB}
+        ${FOUNDATION_LIB}
     )
 endif()
 

@@ -23,11 +23,11 @@ IFS=. read -r MA MI PA <<< "$cur"
 
 arg="${1:-}"
 case "$arg" in
-    major) new="$((MA+1)).0.0" ;;
-    minor) new="${MA}.$((MI+1)).0" ;;
-    patch) new="${MA}.${MI}.$((PA+1))" ;;
+    major)         new="$((MA+1)).0.0" ;;
+    minor)         new="${MA}.$((MI+1)).0" ;;
+    build|patch)   new="${MA}.${MI}.$((PA+1))" ;;   # 3rd component = build number
     [0-9]*.[0-9]*.[0-9]*) new="$arg" ;;
-    *) echo "Usage: $0 {major|minor|patch|X.Y.Z}  (current: $cur)"; exit 1 ;;
+    *) echo "Usage: $0 {major|minor|build|X.Y.Z}  (current: $cur)"; exit 1 ;;
 esac
 
 echo "Bumping $cur -> $new"
@@ -42,8 +42,10 @@ echo "Bumping $cur -> $new"
 # 3) Website update endpoint + product page (if the website tree is present locally)
 [ -f "$WEB/spiritbox/updates.php" ] && \
     /usr/bin/sed -i '' -E "s/(\\\$LATEST[[:space:]]*=[[:space:]]*')$cur(')/\1$new\2/" "$WEB/spiritbox/updates.php"
-[ -f "$WEB/spiritbox.php" ] && \
+if [ -f "$WEB/spiritbox.php" ]; then
     /usr/bin/sed -i '' -E "s/(\\\$sb_version[[:space:]]*=[[:space:]]*')$cur(')/\1$new\2/" "$WEB/spiritbox.php"
+    /usr/bin/sed -i '' -E "s/(Beta &middot; v)$cur/\1$new/" "$WEB/spiritbox.php"
+fi
 
 echo "Updated: CMakeLists.txt, distribution.xml, and website (where present)."
 

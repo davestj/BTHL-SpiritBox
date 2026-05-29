@@ -112,12 +112,24 @@ echo "Payload: BTHL-SpiritBox/{BTHL-SpiritBox.app, models/ggml-base.en.bin}"
 step "5/7 Building per-user Developer ID Installer-signed .pkg"
 mkdir -p "$DIST"
 COMPONENT="$DIST/BTHL-SpiritBox-component.pkg"
+
+# Assemble the installer-branding resources productbuild expects (referenced by distribution.xml).
+RESDIR="$DIST/installer-resources"
+rm -rf "$RESDIR"; mkdir -p "$RESDIR"
+cp -f "$ROOT/assets/branding/installer-bg.png" "$RESDIR/installer-bg.png"
+cp -f "$ROOT/resources/installer/welcome.html"  "$RESDIR/welcome.html"
+cp -f "$ROOT/resources/installer/conclusion.html" "$RESDIR/conclusion.html"
+cp -f "$ROOT/LICENSE" "$RESDIR/license.txt"
+chmod +x "$ROOT/resources/installer/scripts/postinstall"
+
 # Install-location /Applications/BTHL is rebased under the user's home by the currentUserHome
-# domain in distribution.xml → ~/Applications/BTHL/BTHL-SpiritBox/.
+# domain in distribution.xml → ~/Applications/BTHL/BTHL-SpiritBox/. The postinstall script
+# auto-launches the app on completion.
 pkgbuild --root "$PAYLOAD" --install-location "/Applications/BTHL" \
+    --scripts "$ROOT/resources/installer/scripts" \
     --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
 productbuild --distribution "$ROOT/resources/distribution.xml" \
-    --package-path "$DIST" \
+    --package-path "$DIST" --resources "$RESDIR" \
     --sign "$IDENTITY_PKG" --timestamp \
     "$PKG"
 rm -f "$COMPONENT"

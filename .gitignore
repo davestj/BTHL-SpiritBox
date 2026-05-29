@@ -46,7 +46,7 @@ models/
 # Generated raster branding — regenerate with assets/branding/generate-assets.sh.
 # We keep the SVG sources, the generator script, and the .desktop entry in git.
 assets/icons/
-assets/branding/splash.png
+assets/branding/*.png
 assets/linux/*.png
 
 # Built installers / packages (multi-GB; produced by scripts/package-macos.sh)

@@ -60,4 +60,7 @@ done
 echo "==> Splash"
 rsvg-convert -w 900 -h 560 "$SPLASH_SVG" -o "$ROOT/assets/branding/splash.png"
 
+echo "==> Installer background"
+rsvg-convert -w 620 -h 418 "$HERE/installer-bg.svg" -o "$ROOT/assets/branding/installer-bg.png"
+
 echo "==> Done. Assets written to assets/icons, assets/linux, assets/branding."

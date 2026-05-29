@@ -31,6 +31,9 @@
 #include "ui/EMFTimelineWidget.h"
 #include "ui/DetectionLogWidget.h"
 #include "ui/HelpBrowser.h"
+#ifdef __APPLE__
+#include "sensors/WirelessScanner.h"
+#endif
 
 #include <QMainWindow>
 #include <QDockWidget>
@@ -203,6 +206,7 @@ private:
     QLabel* m_statusVAD{nullptr};
     QLabel* m_statusRecording{nullptr};
     QLabel* m_statusMode{nullptr};
+    QLabel* m_statusWireless{nullptr};
     QTimer* m_statusTimer{nullptr};
 
     // We remember each dock's home area so we can snap it back when closed.
@@ -210,6 +214,9 @@ private:
 
     // ─── Documentation browser (lazily created) ────────────────────────────
     std::unique_ptr<HelpBrowser> m_helpBrowser;
+#ifdef __APPLE__
+    std::unique_ptr<WirelessScanner> m_wireless;   ///< macOS Wi-Fi + BLE environmental scanner
+#endif
 };
 
 } // namespace bthl::spiritbox
