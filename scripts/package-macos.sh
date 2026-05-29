@@ -96,24 +96,25 @@ codesign --force --options runtime --timestamp \
 echo "Verifying signature…"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
-# ─── 4. Assemble the per-user payload (app + sibling base model) ──────────────
-step "4/7 Assembling install payload (app + base.en in sibling models/)"
-PAYLOAD="$DIST/payload"
+# ─── 4. Assemble the APP-ONLY payload ─────────────────────────────────────────
+# IMPORTANT: the app and the models ship as SEPARATE installers. Mixing a .app bundle with
+# loose model files in one payload caused pkgbuild to register the .app as a relocatable bundle,
+# which the per-user (home-domain) install then SKIPPED — installing the model but not the app.
+step "4/7 Assembling app-only payload"
+PAYLOAD="$DIST/payload-app"
 APPROOT="$PAYLOAD/BTHL-SpiritBox"   # becomes ~/Applications/BTHL/BTHL-SpiritBox
-rm -rf "$PAYLOAD"; mkdir -p "$APPROOT/models"
+rm -rf "$PAYLOAD"; mkdir -p "$APPROOT"
 cp -R "$APP" "$APPROOT/BTHL-SpiritBox.app"
-if [ ! -s "$ROOT/models/ggml-base.en.bin" ]; then
-    echo "base.en missing — fetching models…"; "$ROOT/scripts/fetch-models.sh"
-fi
-cp -f "$ROOT/models/ggml-base.en.bin" "$APPROOT/models/ggml-base.en.bin"
-echo "Payload: BTHL-SpiritBox/{BTHL-SpiritBox.app, models/ggml-base.en.bin}"
+echo "Payload: BTHL-SpiritBox/BTHL-SpiritBox.app"
 
-# ─── 5. Build the per-user, Installer-signed .pkg ─────────────────────────────
-step "5/7 Building per-user Developer ID Installer-signed .pkg"
+# ─── 5. Build the app installer (.pkg), bundle NON-relocatable ────────────────
+step "5/7 Building app installer .pkg (Developer ID, non-relocatable)"
 mkdir -p "$DIST"
+# NOTE: this filename MUST match the pkg-ref in resources/distribution.xml.
 COMPONENT="$DIST/BTHL-SpiritBox-component.pkg"
+PLIST="$DIST/app-component.plist"
 
-# Assemble the installer-branding resources productbuild expects (referenced by distribution.xml).
+# Branding resources for productbuild (referenced by distribution.xml).
 RESDIR="$DIST/installer-resources"
 rm -rf "$RESDIR"; mkdir -p "$RESDIR"
 cp -f "$ROOT/assets/branding/installer-bg.png" "$RESDIR/installer-bg.png"
@@ -122,18 +123,44 @@ cp -f "$ROOT/resources/installer/conclusion.html" "$RESDIR/conclusion.html"
 cp -f "$ROOT/LICENSE" "$RESDIR/license.txt"
 chmod +x "$ROOT/resources/installer/scripts/postinstall"
 
-# Install-location /Applications/BTHL is rebased under the user's home by the currentUserHome
-# domain in distribution.xml → ~/Applications/BTHL/BTHL-SpiritBox/. The postinstall script
-# auto-launches the app on completion.
-pkgbuild --root "$PAYLOAD" --install-location "/Applications/BTHL" \
+# Mark the .app non-relocatable so it installs at the EXACT install-location (the bug fix).
+pkgbuild --analyze --root "$PAYLOAD" "$PLIST"
+/usr/libexec/PlistBuddy -c "Set :0:BundleIsRelocatable false" "$PLIST" 2>/dev/null || true
+pkgbuild --root "$PAYLOAD" --component-plist "$PLIST" \
+    --install-location "/Applications/BTHL" \
     --scripts "$ROOT/resources/installer/scripts" \
     --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
 productbuild --distribution "$ROOT/resources/distribution.xml" \
     --package-path "$DIST" --resources "$RESDIR" \
     --sign "$IDENTITY_PKG" --timestamp \
     "$PKG"
-rm -f "$COMPONENT"
-echo "Built: $PKG"
+rm -f "$COMPONENT" "$PLIST"
+echo "Built app installer: $PKG"
+
+# ─── 5b. Build one model installer per .bin (separate, distinct filenames) ────
+step "5b/7 Building model installers (one per model)"
+MODEL_DIST="$DIST/model-distribution.xml"
+for bin in "$ROOT"/models/ggml-*.bin; do
+    [ -s "$bin" ] || continue
+    fbase="$(basename "$bin")"                       # ggml-base.en.bin
+    name="${fbase#ggml-}"; name="${name%.bin}"; name="${name//./-}"  # base-en
+    mpkg="$DIST/bthl-spiritbox-model-${name}-${VERSION}.pkg"
+    mpaydir="$DIST/payload-model-$name"
+    rm -rf "$mpaydir"; mkdir -p "$mpaydir/BTHL-SpiritBox/models"
+    cp -f "$bin" "$mpaydir/BTHL-SpiritBox/models/$fbase"
+    mcomp="$DIST/model-$name-component.pkg"
+    pkgbuild --root "$mpaydir" --install-location "/Applications/BTHL" \
+        --identifier "com.beyondthehorizonlabs.spiritbox.model.${name}" --version "$VERSION" "$mcomp"
+    # Per-user (home-domain) distribution so the model lands in the same models/ folder as the app.
+    sed -e "s#@COMPONENT@#$(basename "$mcomp")#" -e "s#@ID@#com.beyondthehorizonlabs.spiritbox.model.${name}#" \
+        -e "s#@TITLE@#BTHL-SpiritBox Model: ${name}#" -e "s#@VERSION@#${VERSION}#" \
+        "$ROOT/resources/model-distribution.xml.in" > "$MODEL_DIST"
+    productbuild --distribution "$MODEL_DIST" --package-path "$DIST" \
+        --sign "$IDENTITY_PKG" --timestamp "$mpkg"
+    rm -rf "$mpaydir" "$mcomp"
+    echo "Built model installer: $mpkg"
+done
+rm -f "$MODEL_DIST"
 
 # ─── 6. Notarize + staple ─────────────────────────────────────────────────────
 if [ "$SKIP_NOTARIZE" -eq 1 ]; then

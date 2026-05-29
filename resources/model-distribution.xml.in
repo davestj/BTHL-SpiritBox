@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Template for a per-user model installer. scripts/package-macos.sh fills @COMPONENT@, @ID@,
+  @TITLE@, @VERSION@ per model. currentUserHome makes the model install into the SAME per-user
+  folder as the app: ~/Applications/BTHL/BTHL-SpiritBox/models/.
+-->
+<installer-gui-script minSpecVersion="2">
+    <title>@TITLE@</title>
+    <organization>com.beyondthehorizonlabs</organization>
+    <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+    <choices-outline><line choice="default"><line choice="@ID@"/></line></choices-outline>
+    <choice id="default"/>
+    <choice id="@ID@" visible="false"><pkg-ref id="@ID@"/></choice>
+    <pkg-ref id="@ID@" version="@VERSION@" onConclusion="none">@COMPONENT@</pkg-ref>
+</installer-gui-script>
