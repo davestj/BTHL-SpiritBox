@@ -120,7 +120,7 @@ void EMFCorrelator::checkCorrelation() {
             double timeDelta = std::fabs(emfIt->timestamp - voiceIt->timestamp);
 
             if (timeDelta <= windowSec) {
-                CorrelatedEvent correlated;
+                CorrelatedEvent correlated{};  // value-initialize so unused fields are never garbage
                 correlated.timestamp = (emfIt->timestamp + voiceIt->timestamp) / 2.0;
                 correlated.emfReading = *emfIt;
                 correlated.voiceEvent = *voiceIt;

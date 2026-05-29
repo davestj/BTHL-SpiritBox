@@ -17,6 +17,7 @@
 #include <QDebug>
 #include <cstring>
 #include <cmath>
+#include <algorithm>
 
 namespace bthl::spiritbox {
 
@@ -52,6 +53,9 @@ bool SessionRecorder::startRecording(const QString& sessionDir,
         meta["capture_mode"] = m_captureMode;
         metaFile.write(QJsonDocument(meta).toJson(QJsonDocument::Indented));
         metaFile.close();
+    } else {
+        qWarning() << "SessionRecorder: We could not write session metadata:"
+                   << metaFile.errorString();
     }
 
     // We open the newline-delimited event log
@@ -65,6 +69,9 @@ bool SessionRecorder::startRecording(const QString& sessionDir,
     m_emfCsvFile = std::make_unique<QFile>(sessionDir + "/emf_timeline.csv");
     if (m_emfCsvFile->open(QIODevice::WriteOnly)) {
         m_emfCsvFile->write("timestamp,emf_milligauss,ef_vm,rf_mw_cm2,is_spike\n");
+    } else {
+        qWarning() << "SessionRecorder: We could not open the EMF timeline CSV:"
+                   << m_emfCsvFile->errorString();
     }
 
     // We open the continuous audio WAV file but defer writing the header until the
@@ -323,9 +330,17 @@ bool SessionRecorder::writeWavHeader(QFile& file, uint32_t sampleRate, uint16_t 
 }
 
 void SessionRecorder::finalizeWavFile(QFile& file) {
-    // We update the RIFF and data chunk sizes
-    uint32_t dataSize = m_audioSamplesWritten * 2; // 16-bit samples = 2 bytes each
-    uint32_t riffSize = dataSize + 36;
+    // The WAV/RIFF format caps these size fields at 32 bits (~4 GiB of PCM, ~6.2 h at 48 kHz
+    // mono int16). We compute in 64-bit and clamp the on-disk fields so we never write a wrapped
+    // (corrupt) size; if we hit the cap we warn rather than silently truncating the header.
+    const uint64_t dataBytes64 = static_cast<uint64_t>(m_audioSamplesWritten) * 2ULL;
+    constexpr uint64_t kMaxData = 0xFFFFFFFFULL - 36ULL;  // leave room for the 36-byte header
+    if (dataBytes64 > kMaxData) {
+        qWarning() << "SessionRecorder: WAV exceeded 4 GiB; size header clamped (audio beyond the"
+                   << "limit is written but not counted in the header)";
+    }
+    const uint32_t dataSize = static_cast<uint32_t>(std::min(dataBytes64, kMaxData));
+    const uint32_t riffSize = dataSize + 36;
 
     file.seek(4);
     file.write(reinterpret_cast<const char*>(&riffSize), 4);

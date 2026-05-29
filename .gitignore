@@ -47,6 +47,10 @@ assets/icons/
 assets/branding/splash.png
 assets/linux/*.png
 
+# Built installers / packages (multi-GB; produced by scripts/package-macos.sh)
+dist/
+*.pkg
+
 # Environment / Secrets
 .env
 *.pem

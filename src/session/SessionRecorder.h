@@ -76,7 +76,7 @@ private:
 
     uint32_t m_audioSampleRate{16000};
     bool m_headerWritten{false};
-    uint32_t m_audioSamplesWritten{0};
+    uint64_t m_audioSamplesWritten{0};  // 64-bit: WAV header field is clamped at finalize
     uint32_t m_snippetCount{0};
     QElapsedTimer m_recordTimer;
 };

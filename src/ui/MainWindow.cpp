@@ -64,8 +64,9 @@ QString resolveDefaultModelDir() {
 
     const QString appDir = QCoreApplication::applicationDirPath();
     const QStringList candidates = {
+        appDir + "/../Resources/models",   // macOS .app bundle (installer places models here)
         appDir + "/models",
-        appDir + "/../models",
+        appDir + "/../models",             // running from build/
         QStringLiteral(BTHL_SPIRITBOX_SOURCE_DIR) + "/models",
     };
     for (const QString& path : candidates) {

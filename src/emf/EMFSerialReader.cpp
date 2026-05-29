@@ -101,6 +101,16 @@ bool EMFSerialReader::connectDevice(const QString& portName, int baudRate) {
     m_expecting = Expecting::Version;
     sendCommand("<GETVER>>");
 
+    // We never stay wedged waiting for a version reply: if the device hasn't answered <GETVER>>
+    // within 1 s (wrong device, silent firmware), we leave version mode so EMF polling works.
+    QTimer::singleShot(1000, this, [this]() {
+        if (m_expecting == Expecting::Version) {
+            m_expecting = Expecting::None;
+            m_readBuffer.clear();
+            qInfo() << "EMFSerialReader: No firmware version reply; proceeding without it";
+        }
+    });
+
     emit connectionStateChanged(true);
     qInfo() << "EMFSerialReader: We connected to" << portName << "at" << baudRate << "baud";
     return true;
@@ -188,19 +198,30 @@ void EMFSerialReader::onSerialError(QSerialPort::SerialPortError error) {
     }
 }
 
-void EMFSerialReader::parseResponse(const QByteArray& data) {
-    // We route the response by the command we last issued so a firmware version string is
-    // never misinterpreted as an EMF float (and vice-versa).
+void EMFSerialReader::parseResponse(const QByteArray& /*unused*/) {
+    // We operate on m_readBuffer directly. The device is untrusted USB input, so we (a) bound
+    // the buffer against runaway growth, (b) drain EVERY complete frame per call (not just one,
+    // since a poll batch can carry several readings), and (c) keep version and EMF framing apart.
+
+    // (a) Bound untrusted growth — a chatty or garbage device must never grow us without limit.
+    constexpr int kMaxReadBuffer = 4096;
+    if (m_readBuffer.size() > kMaxReadBuffer) {
+        qWarning() << "EMFSerialReader: read buffer exceeded" << kMaxReadBuffer
+                   << "bytes; discarding to resynchronize";
+        m_readBuffer.clear();
+        return;
+    }
+
+    // (b) The <GETVER>> reply is a printable firmware string — recorded as a capability, never
+    // fed to the EMF float parser. A 1 s timeout (armed in connectDevice) clears this state so a
+    // non-responding device can never wedge EMF parsing in "version" mode.
     if (m_expecting == Expecting::Version) {
-        // The <GETVER>> reply is a printable firmware string. We take the buffer as text,
-        // record it as a real capability, and never feed these bytes to the EMF parser.
         QString ver = QString::fromLatin1(m_readBuffer).trimmed();
-        // We require some printable content before accepting it.
         if (!ver.isEmpty()) {
             m_capabilities.valid = true;
             m_capabilities.firmwareVersion = ver;
-            m_capabilities.readsEmf = true;   // We genuinely read magnetic field
-            m_capabilities.readsEf = false;   // EF/RF not parsed by this firmware path
+            m_capabilities.readsEmf = true;
+            m_capabilities.readsEf = false;
             m_capabilities.readsRf = false;
             m_expecting = Expecting::None;
             m_readBuffer.clear();
@@ -210,34 +231,34 @@ void EMFSerialReader::parseResponse(const QByteArray& data) {
         return;
     }
 
-    if (data.size() < 4) return; // We need at least 4 bytes for a valid EMF reading
+    // (c) Drain every complete 4-byte big-endian IEEE-754 float frame the device sent.
+    while (m_readBuffer.size() >= 4) {
+        uint32_t rawValue = 0;
+        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(m_readBuffer[0])) << 24;
+        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(m_readBuffer[1])) << 16;
+        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(m_readBuffer[2])) << 8;
+        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(m_readBuffer[3]));
+        m_readBuffer.remove(0, 4);  // We always consume the frame we just read
 
-    // The GQ EMF-390 returns EMF readings as 4-byte big-endian IEEE 754 floats after <GETEMF>>.
-    uint32_t rawValue = 0;
-    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[0])) << 24;
-    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[1])) << 16;
-    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[2])) << 8;
-    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[3]));
+        float emfValue;
+        std::memcpy(&emfValue, &rawValue, sizeof(float));
 
-    float emfValue;
-    std::memcpy(&emfValue, &rawValue, sizeof(float));
+        // We validate the reading is within reasonable bounds; out-of-range frames are dropped.
+        if (!(std::isfinite(emfValue) && emfValue >= 0.0f && emfValue < 2000.0f)) {
+            continue;
+        }
 
-    // We validate the reading is within reasonable bounds
-    if (std::isfinite(emfValue) && emfValue >= 0.0f && emfValue < 2000.0f) {
         EMFReading reading;
         reading.timestamp = m_sessionTimer.elapsed() / 1000.0;
         reading.emfMilligauss = static_cast<double>(emfValue);
-        // We do NOT have electric-field or RF readings on this path. We record NaN ("not
-        // measured") rather than a fake 0.0 so downstream never presents an invented value.
+        // We record EF/RF as NaN ("not measured") rather than a fabricated 0.0.
         reading.efVm = std::numeric_limits<double>::quiet_NaN();
         reading.rfMwCm2 = std::numeric_limits<double>::quiet_NaN();
 
-        // We check if this reading qualifies as a spike
         double deviation = reading.emfMilligauss - m_baseline;
         reading.isSpike = (deviation > m_spikeThreshold) ||
                           (reading.emfMilligauss > m_spikeThreshold);
 
-        // We update our rolling baseline
         updateBaseline(reading.emfMilligauss);
 
         m_lastReading = reading;
@@ -249,9 +270,6 @@ void EMFSerialReader::parseResponse(const QByteArray& data) {
             emit spikeDetected(reading);
         }
     }
-
-    // We clear the processed bytes from our buffer
-    m_readBuffer = m_readBuffer.mid(4);
 }
 
 void EMFSerialReader::sendCommand(const QByteArray& command) {

@@ -46,7 +46,10 @@ int main(int argc, char* argv[]) {
     /// RTL-SDR concurrently, corrupting retune (random PLL-lock failures) and
     /// triggering stream OVERFLOWs — the device cannot be shared (see CLAUDE.md).
     QLockFile lockFile(QDir::temp().absoluteFilePath("bthl-spiritbox.lock"));
-    lockFile.setStaleLockTime(0);  // We never treat our lock as stale while alive
+    // We allow QLockFile to reclaim a lock left by a crashed instance: with a non-zero stale
+    // time it checks the recorded PID and removes the lock if that process is gone, so a hard
+    // crash never blocks future launches forever.
+    lockFile.setStaleLockTime(30000);
     if (!lockFile.tryLock(100)) {
         qCritical() << "BTHL-SpiritBox: Another instance is already running — refusing to start.";
         QMessageBox::critical(nullptr, "BTHL-SpiritBox Already Running",
