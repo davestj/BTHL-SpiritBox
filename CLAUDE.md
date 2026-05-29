@@ -95,5 +95,4 @@ Qt6 (Widgets, Multimedia, SerialPort, Charts, Concurrent), SoapySDR, PortAudio, 
 
 - Switch from CMake to another build system
 - Remove whisper.cpp conditional compilation
-- Auto-start sweep without user action
 - Share the SDR device with SpectraSentry simultaneously
