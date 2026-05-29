@@ -19,6 +19,7 @@
 #include "core/SweepEngine.h"
 #include "core/AudioDemodulator.h"
 #include "audio/AudioOutputManager.h"
+#include "audio/MicrophoneInput.h"
 #include "detection/VoiceActivityDetector.h"
 #include "detection/WhisperTranscriber.h"
 #include "emf/EMFSerialReader.h"
@@ -29,22 +30,37 @@
 #include "ui/AudioWaveformWidget.h"
 #include "ui/EMFTimelineWidget.h"
 #include "ui/DetectionLogWidget.h"
+#include "ui/HelpBrowser.h"
 
 #include <QMainWindow>
 #include <QDockWidget>
 #include <QComboBox>
 #include <QPushButton>
+#include <QButtonGroup>
 #include <QSlider>
 #include <QLabel>
 #include <QTextEdit>
+#include <QPlainTextEdit>
 #include <QGroupBox>
 #include <QStatusBar>
 #include <QMenuBar>
 #include <QToolBar>
 #include <QTimer>
+#include <QHash>
 #include <memory>
 
 namespace bthl::spiritbox {
+
+/**
+ * @enum CaptureMode
+ * @purpose We define how a session is captured. The mode governs whether the investigator
+ *          microphone is recorded and how the transcript/session is framed.
+ */
+enum class CaptureMode {
+    Interactive,    ///< Mic ON — investigator questions + radio responses (full Q&A)
+    Standalone,     ///< Mic OFF — radio responses only
+    PassiveListen   ///< Mic OFF — continuous listening for spontaneous responses
+};
 
 /**
  * @class MainWindow
@@ -81,6 +97,13 @@ private slots:
 
     // ─── Whisper Control ───────────────────────────────────────────────────
     void onLoadWhisperModel();
+    void onUnloadWhisperModel();
+
+    // ─── Capture Modes + Transcript Export + Help ──────────────────────────
+    void onCaptureModeChanged(CaptureMode mode);
+    void onSaveTranscript();
+    void onShowDocumentation();
+    void onShowDeviceCapabilities();
 
     // ─── Status Updates ────────────────────────────────────────────────────
     void onSweepStatusUpdated(const SweepStatus& status);
@@ -106,11 +129,23 @@ private:
     void wireSignals();
     void loadDefaultProfile();
 
+    // ─── Dock behavior ─────────────────────────────────────────────────────
+    /// We make every dock panel re-dock instead of vanishing when its close button is used.
+    void installDockRedockBehavior();
+
+protected:
+    /// We intercept dock-widget close events to snap the panel back to its dock area.
+    bool eventFilter(QObject* watched, QEvent* event) override;
+
+private:
+
     // ─── Subsystem Instances ───────────────────────────────────────────────
     std::unique_ptr<SweepEngine> m_sweepEngine;
     std::unique_ptr<AudioDemodulator> m_demodulator;
     std::unique_ptr<AudioOutputManager> m_audioOutput;
     std::unique_ptr<VoiceActivityDetector> m_vad;
+    std::unique_ptr<MicrophoneInput> m_micInput;             ///< Investigator microphone capture
+    std::unique_ptr<VoiceActivityDetector> m_investigatorVad; ///< VAD for the investigator mic path
     std::unique_ptr<WhisperTranscriber> m_whisper;
     std::unique_ptr<EMFSerialReader> m_emfReader;
     std::unique_ptr<EMFCorrelator> m_correlator;
@@ -128,6 +163,15 @@ private:
     QPushButton* m_recordBtn{nullptr};
     QPushButton* m_stopRecordBtn{nullptr};
     QPushButton* m_loadModelBtn{nullptr};
+    QPushButton* m_unloadModelBtn{nullptr};
+    QPushButton* m_saveTranscriptBtn{nullptr};
+
+    // ─── Capture Mode selector ─────────────────────────────────────────────
+    QButtonGroup* m_modeGroup{nullptr};
+    QPushButton* m_modeInteractiveBtn{nullptr};
+    QPushButton* m_modeStandaloneBtn{nullptr};
+    QPushButton* m_modePassiveBtn{nullptr};
+    CaptureMode m_captureMode{CaptureMode::Standalone};
     QSlider* m_dwellSlider{nullptr};
     QSlider* m_gainSlider{nullptr};
     QSlider* m_volumeSlider{nullptr};
@@ -137,8 +181,11 @@ private:
     QLabel* m_emfLabel{nullptr};
 
     // ─── Display Widgets ───────────────────────────────────────────────────
-    QTextEdit* m_detectionLog{nullptr};
-    QTextEdit* m_transcriptionLog{nullptr};
+    // We use QPlainTextEdit with a bounded block count for these high-volume logs: it is built
+    // for fast appends and auto-trims old lines, avoiding the unbounded-growth layout crash a
+    // QTextEdit hits under continuous transcription.
+    QPlainTextEdit* m_detectionLog{nullptr};
+    QPlainTextEdit* m_transcriptionLog{nullptr};
 
     // ─── Visualization Widgets (Phase 2) ──────────────────────────────────
     SweepVisualizerWidget* m_sweepVisualizer{nullptr};
@@ -151,7 +198,14 @@ private:
     QLabel* m_statusEMF{nullptr};
     QLabel* m_statusVAD{nullptr};
     QLabel* m_statusRecording{nullptr};
+    QLabel* m_statusMode{nullptr};
     QTimer* m_statusTimer{nullptr};
+
+    // We remember each dock's home area so we can snap it back when closed.
+    QHash<QDockWidget*, Qt::DockWidgetArea> m_dockHomeAreas;
+
+    // ─── Documentation browser (lazily created) ────────────────────────────
+    std::unique_ptr<HelpBrowser> m_helpBrowser;
 };
 
 } // namespace bthl::spiritbox

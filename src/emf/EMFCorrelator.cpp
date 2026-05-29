@@ -78,6 +78,12 @@ void EMFCorrelator::onVoiceDetected(const VoiceDetectionEvent& event) {
 }
 
 void EMFCorrelator::onTranscriptionReady(const TranscriptionResult& result) {
+    // We never correlate the investigator's own spoken questions with EMF activity —
+    // attaching their voice to a spike would mislabel it as a spirit response.
+    if (result.source == VoiceSource::Investigator) {
+        return;
+    }
+
     m_pendingTranscriptions.push_back(result);
 
     while (m_pendingTranscriptions.size() > MAX_PENDING_EVENTS) {

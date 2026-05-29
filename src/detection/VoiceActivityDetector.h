@@ -23,6 +23,16 @@
 namespace bthl::spiritbox {
 
 /**
+ * @enum VoiceSource
+ * @purpose We distinguish where a detected voice originated so the transcript can label
+ *          the investigator's own spoken questions separately from radio-band responses.
+ */
+enum class VoiceSource {
+    RadioSweep,     ///< Voice demodulated from the swept RF spectrum (potential EVP / spirit response)
+    Investigator    ///< Voice captured from the microphone (the investigator speaking / asking questions)
+};
+
+/**
  * @struct VoiceDetectionEvent
  * @purpose We emit this when voice activity is detected in the audio stream
  */
@@ -34,6 +44,7 @@ struct VoiceDetectionEvent {
     float zeroCrossingRate;     ///< Zero crossing rate (voice typically 0.02-0.15)
     float spectralFlatness;     ///< Spectral flatness (voice < noise)
     std::vector<float> audioSnippet; ///< We capture the audio snippet for Whisper
+    VoiceSource source{VoiceSource::RadioSweep}; ///< Radio-band response vs investigator microphone
 };
 
 /**
@@ -80,6 +91,14 @@ public:
      */
     void setEnabled(bool enabled);
     [[nodiscard]] bool isEnabled() const;
+
+    /**
+     * @brief We tag every event this detector emits with its source (radio vs microphone).
+     *        We use a dedicated detector instance for the investigator microphone so its
+     *        detections are labelled VoiceSource::Investigator in the transcript.
+     */
+    void setSource(VoiceSource source);
+    [[nodiscard]] VoiceSource source() const;
 
 public slots:
     /**
@@ -130,6 +149,7 @@ private:
     uint32_t m_minDurationMs{100};
     uint32_t m_snippetDurationMs{2000};
     bool m_enabled{true};
+    VoiceSource m_source{VoiceSource::RadioSweep};
 
     // We accumulate audio samples for snippet capture
     std::deque<float> m_snippetBuffer;

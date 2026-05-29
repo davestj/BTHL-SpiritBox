@@ -1,0 +1,42 @@
+<h1>Frequently Asked Questions</h1>
+
+<h3>What is a "spirit box"?</h3>
+<p>A spirit box (or ghost box) rapidly sweeps radio frequencies to create a continuous stream of
+fragmentary audio. The paranormal-investigation premise is that a presence can shape that stream
+into words — Electronic Voice Phenomena (EVP). BTHL-SpiritBox implements this with a software-defined
+radio and adds AI transcription, EMF correlation, and full session archival.</p>
+
+<h3>Is this scientifically proven?</h3>
+<p>No. The spirit-box technique is not scientifically validated, and sweep audio is noise by design —
+the human mind readily finds words in randomness (pareidolia). This tool is built for investigators
+and enthusiasts who want a rigorous, reviewable <em>record</em>: timestamps, transcripts, WAV audio,
+and EMF correlation, so claims can be examined rather than taken on faith. Stay skeptical.</p>
+
+<h3>Does my audio leave the machine?</h3>
+<p>No. Transcription uses whisper.cpp locally. Nothing is uploaded.</p>
+
+<h3>Why does it capture my voice?</h3>
+<p>Only in <a href="capture-modes.html">Interactive</a> mode, so your questions appear in the
+transcript alongside responses — turning a session into a readable Q&amp;A. Standalone and Passive
+Listen modes never record the mic. Your voice is never correlated with EMF as a "response."</p>
+
+<h3>Is the data real, or is any of it simulated?</h3>
+<p>Everything is real. All readings come from your connected hardware (SDR, EMF meter, microphone)
+or genuine analysis of those signals. If a device isn't connected, the app shows nothing for it —
+it never fabricates, randomizes, or simulates readings.</p>
+
+<h3>What hardware do I actually need?</h3>
+<p>At minimum an RTL-SDR dongle. A GQ EMF-390 and a microphone are optional but unlock EMF
+correlation and question-capture respectively. See <a href="hardware-setup.html">Hardware Setup</a>.</p>
+
+<h3>Why can't I scan the AM band?</h3>
+<p>If your tuner is an Elonics E4000, it physically can't tune below ~52 MHz. Use FM or VHF. See
+<a href="sweep-profiles.html">Sweep Profiles</a>.</p>
+
+<h3>Which Whisper model should I use?</h3>
+<p><code>base.en</code> to start, <code>small.en</code> for better accuracy. See
+<a href="whisper-models.html">Whisper Models</a>.</p>
+
+<h3>How do I save a session?</h3>
+<p>Arm recording for a full WAV + JSON archive, and/or use <strong>File → Save Transcript…</strong>
+for a text export at any time.</p>

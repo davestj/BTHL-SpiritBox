@@ -15,6 +15,9 @@
 #include <QDebug>
 #include <numeric>
 #include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <limits>
 
 namespace bthl::spiritbox {
 
@@ -88,8 +91,14 @@ bool EMFSerialReader::connectDevice(const QString& portName, int baudRate) {
     m_sessionTimer.start();
     m_baseline = 0.0;
     m_baselineWindow.clear();
+    m_readBuffer.clear();
 
-    // We send a version request to verify the device is a GQ EMF meter
+    // We record what we know about the meter and ask for its firmware version. We mark the
+    // next response as a version string so it is parsed as text, never as an EMF float.
+    m_capabilities = EmfCapabilities{};
+    m_capabilities.portName = portName;
+    m_capabilities.pollingIntervalMs = m_pollTimer->interval();
+    m_expecting = Expecting::Version;
     sendCommand("<GETVER>>");
 
     emit connectionStateChanged(true);
@@ -149,6 +158,10 @@ double EMFSerialReader::baselineMilligauss() const {
     return m_baseline;
 }
 
+EmfCapabilities EMFSerialReader::capabilities() const {
+    return m_capabilities;
+}
+
 void EMFSerialReader::onDataReady() {
     m_readBuffer.append(m_serialPort->readAll());
     parseResponse(m_readBuffer);
@@ -157,8 +170,9 @@ void EMFSerialReader::onDataReady() {
 void EMFSerialReader::onPollTimer() {
     if (!m_serialPort->isOpen()) return;
 
-    // We request the current EMF reading from the GQ EMF-390
-    // The <GETEMF>> command returns the current EMF field strength
+    // We request the current EMF reading from the GQ EMF-390. The <GETEMF>> command returns
+    // the current EMF field strength; we mark the next response as an EMF float.
+    m_expecting = Expecting::Emf;
     sendCommand("<GETEMF>>");
 }
 
@@ -175,56 +189,69 @@ void EMFSerialReader::onSerialError(QSerialPort::SerialPortError error) {
 }
 
 void EMFSerialReader::parseResponse(const QByteArray& data) {
-    // We parse the GQ EMF-390 response format
-    // The device returns EMF values as floating point strings or binary data
-    // depending on the firmware version and command used
-
-    if (data.size() < 4) return; // We need at least 4 bytes for a valid reading
-
-    // We attempt to parse as a binary float (4 bytes, big-endian)
-    // The GQ EMF-390 returns EMF readings as 4-byte big-endian IEEE 754 floats
-    // after the <GETEMF>> command
-
-    if (data.size() >= 4) {
-        // We extract the float value from the first 4 bytes
-        uint32_t rawValue = 0;
-        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[0])) << 24;
-        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[1])) << 16;
-        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[2])) << 8;
-        rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[3]));
-
-        float emfValue;
-        std::memcpy(&emfValue, &rawValue, sizeof(float));
-
-        // We validate the reading is within reasonable bounds
-        if (std::isfinite(emfValue) && emfValue >= 0.0f && emfValue < 2000.0f) {
-            EMFReading reading;
-            reading.timestamp = m_sessionTimer.elapsed() / 1000.0;
-            reading.emfMilligauss = static_cast<double>(emfValue);
-            reading.efVm = 0.0;
-            reading.rfMwCm2 = 0.0;
-
-            // We check if this reading qualifies as a spike
-            double deviation = reading.emfMilligauss - m_baseline;
-            reading.isSpike = (deviation > m_spikeThreshold) ||
-                              (reading.emfMilligauss > m_spikeThreshold);
-
-            // We update our rolling baseline
-            updateBaseline(reading.emfMilligauss);
-
-            m_lastReading = reading;
-            emit readingReceived(reading);
-
-            if (reading.isSpike) {
-                qInfo() << "EMFSerialReader: We detected an EMF spike:"
-                        << reading.emfMilligauss << "mG (baseline:" << m_baseline << "mG)";
-                emit spikeDetected(reading);
-            }
+    // We route the response by the command we last issued so a firmware version string is
+    // never misinterpreted as an EMF float (and vice-versa).
+    if (m_expecting == Expecting::Version) {
+        // The <GETVER>> reply is a printable firmware string. We take the buffer as text,
+        // record it as a real capability, and never feed these bytes to the EMF parser.
+        QString ver = QString::fromLatin1(m_readBuffer).trimmed();
+        // We require some printable content before accepting it.
+        if (!ver.isEmpty()) {
+            m_capabilities.valid = true;
+            m_capabilities.firmwareVersion = ver;
+            m_capabilities.readsEmf = true;   // We genuinely read magnetic field
+            m_capabilities.readsEf = false;   // EF/RF not parsed by this firmware path
+            m_capabilities.readsRf = false;
+            m_expecting = Expecting::None;
+            m_readBuffer.clear();
+            qInfo() << "EMFSerialReader: Connected meter firmware:" << ver;
+            emit capabilitiesProbed(m_capabilities);
         }
-
-        // We clear the processed bytes from our buffer
-        m_readBuffer = m_readBuffer.mid(4);
+        return;
     }
+
+    if (data.size() < 4) return; // We need at least 4 bytes for a valid EMF reading
+
+    // The GQ EMF-390 returns EMF readings as 4-byte big-endian IEEE 754 floats after <GETEMF>>.
+    uint32_t rawValue = 0;
+    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[0])) << 24;
+    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[1])) << 16;
+    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[2])) << 8;
+    rawValue |= static_cast<uint32_t>(static_cast<uint8_t>(data[3]));
+
+    float emfValue;
+    std::memcpy(&emfValue, &rawValue, sizeof(float));
+
+    // We validate the reading is within reasonable bounds
+    if (std::isfinite(emfValue) && emfValue >= 0.0f && emfValue < 2000.0f) {
+        EMFReading reading;
+        reading.timestamp = m_sessionTimer.elapsed() / 1000.0;
+        reading.emfMilligauss = static_cast<double>(emfValue);
+        // We do NOT have electric-field or RF readings on this path. We record NaN ("not
+        // measured") rather than a fake 0.0 so downstream never presents an invented value.
+        reading.efVm = std::numeric_limits<double>::quiet_NaN();
+        reading.rfMwCm2 = std::numeric_limits<double>::quiet_NaN();
+
+        // We check if this reading qualifies as a spike
+        double deviation = reading.emfMilligauss - m_baseline;
+        reading.isSpike = (deviation > m_spikeThreshold) ||
+                          (reading.emfMilligauss > m_spikeThreshold);
+
+        // We update our rolling baseline
+        updateBaseline(reading.emfMilligauss);
+
+        m_lastReading = reading;
+        emit readingReceived(reading);
+
+        if (reading.isSpike) {
+            qInfo() << "EMFSerialReader: We detected an EMF spike:"
+                    << reading.emfMilligauss << "mG (baseline:" << m_baseline << "mG)";
+            emit spikeDetected(reading);
+        }
+    }
+
+    // We clear the processed bytes from our buffer
+    m_readBuffer = m_readBuffer.mid(4);
 }
 
 void EMFSerialReader::sendCommand(const QByteArray& command) {

@@ -116,8 +116,22 @@ bool SweepEngine::openDevice(const SdrDeviceInfo& deviceInfo) {
             return false;
         }
 
+        // We probe what this physical device can actually do, so the UI and the sweep
+        // planner work within real hardware limits (e.g. an E4000 cannot reach the AM band).
+        m_capabilities = probeCapabilitiesLocked();
+
+        // We rebuild the step list now that we know the real tunable range, so any
+        // already-loaded profile immediately benefits from out-of-range auto-skip.
+        buildStepList();
+
         qInfo() << "SweepEngine: We successfully opened device:" << deviceInfo.label;
+        if (m_capabilities.valid) {
+            qInfo() << "SweepEngine: Tuner" << m_capabilities.tuner
+                    << "range" << m_capabilities.freqMinHz / 1e6 << "-"
+                    << m_capabilities.freqMaxHz / 1e6 << "MHz";
+        }
         emit deviceStateChanged(true);
+        emit capabilitiesProbed(m_capabilities);
         return true;
 
     } catch (const std::exception& ex) {
@@ -149,6 +163,8 @@ void SweepEngine::closeDevice() {
         qInfo() << "SweepEngine: We released the SoapySDR device";
     }
 
+    m_capabilities = SdrCapabilities{};  // We drop stale capabilities with the device
+
     emit deviceStateChanged(false);
 }
 
@@ -158,6 +174,66 @@ bool SweepEngine::isDeviceOpen() const {
 
 SdrDeviceInfo SweepEngine::currentDeviceInfo() const {
     return m_currentDevice;
+}
+
+SdrCapabilities SweepEngine::capabilities() const {
+    return m_capabilities;
+}
+
+SdrCapabilities SweepEngine::probeCapabilitiesLocked() {
+    SdrCapabilities caps;
+    if (!m_device) return caps;
+
+    try {
+        caps.driver = QString::fromStdString(m_device->getDriverKey());
+        caps.hardwareKey = QString::fromStdString(m_device->getHardwareKey());
+
+        // We read the tuner chip from the hardware info if the driver reports it.
+        const SoapySDR::Kwargs hw = m_device->getHardwareInfo();
+        auto it = hw.find("tuner");
+        if (it != hw.end()) caps.tuner = QString::fromStdString(it->second);
+
+        // Full tunable frequency range (union of all sub-ranges the device reports).
+        const auto freqRanges = m_device->getFrequencyRange(SOAPY_SDR_RX, 0);
+        if (!freqRanges.empty()) {
+            caps.freqMinHz = freqRanges.front().minimum();
+            caps.freqMaxHz = freqRanges.back().maximum();
+            for (const auto& r : freqRanges) {
+                caps.freqMinHz = std::min(caps.freqMinHz, r.minimum());
+                caps.freqMaxHz = std::max(caps.freqMaxHz, r.maximum());
+            }
+        }
+
+        // Sample-rate envelope.
+        const auto srRanges = m_device->getSampleRateRange(SOAPY_SDR_RX, 0);
+        if (!srRanges.empty()) {
+            caps.sampleRateMinHz = srRanges.front().minimum();
+            caps.sampleRateMaxHz = srRanges.back().maximum();
+            for (const auto& r : srRanges) {
+                caps.sampleRateMinHz = std::min(caps.sampleRateMinHz, r.minimum());
+                caps.sampleRateMaxHz = std::max(caps.sampleRateMaxHz, r.maximum());
+            }
+        }
+
+        // Overall gain range and named gain stages.
+        const SoapySDR::Range gainRange = m_device->getGainRange(SOAPY_SDR_RX, 0);
+        caps.gainMinDb = gainRange.minimum();
+        caps.gainMaxDb = gainRange.maximum();
+        for (const auto& g : m_device->listGains(SOAPY_SDR_RX, 0)) {
+            caps.gainElements << QString::fromStdString(g);
+        }
+
+        for (const auto& a : m_device->listAntennas(SOAPY_SDR_RX, 0)) {
+            caps.antennas << QString::fromStdString(a);
+        }
+
+        caps.hasAgc = m_device->hasGainMode(SOAPY_SDR_RX, 0);
+        caps.valid = true;
+    } catch (const std::exception& ex) {
+        qWarning() << "SweepEngine: We could not fully probe device capabilities:" << ex.what();
+        // We keep whatever we gathered; valid stays false unless we completed above.
+    }
+    return caps;
 }
 
 // ─── Sweep Control ─────────────────────────────────────────────────────────────
@@ -384,16 +460,39 @@ double SweepEngine::calculatePowerDb(const std::vector<std::complex<float>>& sam
 void SweepEngine::buildStepList() {
     m_stepList.clear();
 
+    // We honor the device's real tunable range when we know it, so we never waste the sweep
+    // hammering frequencies the tuner physically cannot reach (e.g. AM on an E4000). We add a
+    // small guard band inside the hardware limits to avoid edge-of-range PLL failures.
+    const bool haveRange = m_capabilities.valid && m_capabilities.freqMaxHz > m_capabilities.freqMinHz;
+    const double devMin = haveRange ? m_capabilities.freqMinHz : 0.0;
+    const double devMax = haveRange ? m_capabilities.freqMaxHz : 0.0;
+
+    size_t skipped = 0;
     for (const auto& band : m_profile.bands()) {
         double freq = band.startFreqHz;
         while (freq <= band.stopFreqHz) {
-            FrequencyStep step;
-            step.freqHz = freq;
-            step.demodMode = band.demodMode;
-            step.bandwidthHz = band.bandwidthHz;
-            m_stepList.push_back(step);
+            if (haveRange && (freq < devMin || freq > devMax)) {
+                ++skipped;            // Out of this tuner's reach — skip instead of failing to tune
+            } else {
+                FrequencyStep step;
+                step.freqHz = freq;
+                step.demodMode = band.demodMode;
+                step.bandwidthHz = band.bandwidthHz;
+                m_stepList.push_back(step);
+            }
             freq += band.stepSizeHz;
         }
+    }
+
+    if (skipped > 0) {
+        qInfo() << "SweepEngine: We skipped" << skipped
+                << "out-of-range steps (tuner reaches" << devMin / 1e6 << "-"
+                << devMax / 1e6 << "MHz)";
+        emit errorOccurred(
+            QString("%1 frequencies are outside this tuner's range (%2–%3 MHz) and were skipped.")
+                .arg(skipped)
+                .arg(devMin / 1e6, 0, 'f', 3)
+                .arg(devMax / 1e6, 0, 'f', 1));
     }
 
     // We randomize the step order if the profile requests it

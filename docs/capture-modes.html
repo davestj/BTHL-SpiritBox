@@ -1,0 +1,51 @@
+<h1>Capture Modes
+  <span class="sub">Three one-click ways to run a session</span>
+</h1>
+
+<p>The capture mode controls whether your microphone is recorded and how the transcript is framed.
+Pick one from the mode selector in the <strong>Transcriptions</strong> panel. Only one mode is
+active at a time, and the choice is saved into the session archive.</p>
+
+<table>
+  <tr><th>Mode</th><th>Microphone</th><th>Radio sweep</th><th>Transcript</th><th>Best for</th></tr>
+  <tr>
+    <td><strong>Interactive</strong></td>
+    <td>ON</td><td>ON</td>
+    <td>Investigator <em>questions</em> + radio <em>responses</em> (full Q&amp;A)</td>
+    <td>Asking questions and listening for replies</td>
+  </tr>
+  <tr>
+    <td><strong>Standalone</strong></td>
+    <td>OFF</td><td>ON</td>
+    <td>Responses only</td>
+    <td>Hands-off capture; you don't want your voice recorded</td>
+  </tr>
+  <tr>
+    <td><strong>Passive Listen</strong></td>
+    <td>OFF</td><td>ON (continuous)</td>
+    <td>Responses only, tagged <em>spontaneous</em></td>
+    <td>Leaving the box running in case the other side initiates</td>
+  </tr>
+</table>
+
+<h2>Interactive</h2>
+<p>The microphone is captured, run through voice-activity detection, and transcribed by the same
+Whisper model as the radio audio. Your questions appear as <code>INVESTIGATOR:</code> lines and the
+radio-band responses appear as <code>RESPONSE @ &lt;freq&gt;</code> lines, interleaved by time. This
+is the mode to use when you're actively conducting a Q&amp;A session.</p>
+<div class="note"><b>Privacy.</b> Investigator audio is only ever used for transcription — it is
+never correlated with EMF spikes, so your own questions can't be mislabeled as a spirit response.</div>
+
+<h2>Standalone</h2>
+<p>The microphone is off. Only the swept radio audio is transcribed. Use this when you want a clean
+record of responses without your own voice in the file, or when you're observing rather than asking.</p>
+
+<h2>Passive Listen</h2>
+<p>Also microphone-off, but framed for an open-ended "listening watch" — you're not driving a
+Q&amp;A, you're leaving the box sweeping in case something comes through on its own. Responses are
+recorded and tagged as spontaneous in the session metadata so you can tell a passive watch apart
+from an interactive session later.</p>
+
+<div class="tip"><b>Switching mid-session</b> is fine. The mode change is reflected immediately in
+the status bar (<code>MODE: …</code>) and recorded, so your archive shows exactly how each part of
+the session was captured.</div>

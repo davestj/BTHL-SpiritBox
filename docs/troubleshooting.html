@@ -1,0 +1,48 @@
+<h1>Troubleshooting</h1>
+
+<h2>The sweep skips frequencies / "PLL not locked"</h2>
+<p>Your SDR's tuner can't reach those frequencies — most commonly the AM band on dongles with an
+<strong>E4000</strong> tuner. BTHL-SpiritBox detects this and automatically skips the unreachable
+parts of the band. Check the <strong>Device Capabilities</strong> panel
+(<em>Devices → Device Capabilities</em>) to see your tuner's real range, and pick an
+<a href="sweep-profiles.html">FM or VHF profile</a> if AM isn't supported.</p>
+
+<h2>No SDR found</h2>
+<ul>
+  <li>Make sure the dongle is firmly seated in a USB port (try a different port, not a hub).</li>
+  <li>Use <strong>Devices → Refresh SDR Devices</strong>.</li>
+  <li>Close any other radio app that might be using the dongle — only one app can use it at a time.</li>
+</ul>
+
+<h2>No audio</h2>
+<ul>
+  <li>Confirm a sweep is running — the frequency readout should be changing.</li>
+  <li>Check the volume slider in the app and your computer's output device.</li>
+</ul>
+
+<h2>My questions aren't being transcribed</h2>
+<ul>
+  <li>Switch to <strong>Interactive</strong> <a href="capture-modes.html">mode</a> — the other modes
+      intentionally leave the microphone off.</li>
+  <li>Make sure a voice model is loaded (<strong>Whisper → Load Model…</strong>).</li>
+  <li><strong>macOS:</strong> allow microphone access when prompted. To change it later, open
+      <em>System Settings → Privacy &amp; Security → Microphone</em> and enable BTHL-SpiritBox.</li>
+</ul>
+
+<h2>"Another instance is already running"</h2>
+<p>Only one copy can run at a time because the SDR can't be shared. Close the existing
+BTHL-SpiritBox window, then reopen.</p>
+
+<h2>The transcript is empty when I save</h2>
+<p>Nothing has been transcribed yet. Load a voice model, run a sweep, and — to capture your own
+questions — switch to Interactive mode. The app tells you when there's nothing to save.</p>
+
+<h2>EMF readings aren't showing</h2>
+<ul>
+  <li>Confirm the GQ EMF-390 is connected by USB and powered on.</li>
+  <li>Use <strong>Devices → Refresh EMF Ports</strong>, then reconnect.</li>
+  <li>The <strong>Device Capabilities</strong> panel shows whether the unit was detected.</li>
+</ul>
+
+<div class="tip"><b>Still stuck?</b> Quit and relaunch the app, and reconnect your hardware. Most
+issues clear with a fresh start and a solid USB connection.</div>

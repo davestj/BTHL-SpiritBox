@@ -1,0 +1,36 @@
+<h1>Hardware Setup</h1>
+
+<h2>RTL-SDR (required)</h2>
+<p>Any RTL2832U-based SDR dongle works through SoapySDR. Plug it in before launching; the app
+auto-detects and opens the first device it finds.</p>
+<pre><code class="language-bash"># Confirm the OS sees your dongle
+SoapySDRUtil --find</code></pre>
+
+<div class="warn"><b>E4000 tuner — important.</b> Some dongles (e.g. the Nooelec SMArt XTR) use the
+<strong>Elonics E4000</strong> tuner, which cannot tune below roughly <strong>52&nbsp;MHz</strong>.
+On those devices the <strong>AM broadcast band (530–1700&nbsp;kHz) is physically unreachable</strong>
+— you'll see <code>PLL not locked</code> errors and the sweep will skip those steps. Use an
+<strong>FM</strong> or <strong>VHF</strong> profile on an E4000. See
+<a href="sweep-profiles.html">Sweep Profiles</a>.</div>
+
+<h2>GQ EMF-390 (optional)</h2>
+<p>The EMF-390 connects over USB serial (CH340 bridge, VID <code>0x1A86</code>). The app scans serial
+ports on startup and connects automatically if it finds one. EMF readings stream at 100&nbsp;ms
+intervals and are correlated with radio-band voice events.</p>
+<ul>
+  <li>Note the <strong>baseline</strong> EMF reading for the room before you start.</li>
+  <li>A spike near a transcribed response raises that event's correlation score.</li>
+</ul>
+
+<h2>Microphone (optional)</h2>
+<p>Used by <a href="capture-modes.html">Interactive mode</a> to transcribe your questions. Any input
+device the OS exposes works; the app converts it to 16&nbsp;kHz mono for Whisper automatically.</p>
+<div class="note"><b>macOS permission.</b> The first time you enable the mic, macOS asks for
+microphone access. The app ships with the required usage description, so just click
+<strong>Allow</strong>. If you previously denied it, re-enable under
+<em>System Settings → Privacy &amp; Security → Microphone</em>.</div>
+
+<h2>Don't share the SDR</h2>
+<p>The RTL-SDR can't be opened by two programs at once. BTHL-SpiritBox enforces a single running
+instance, and you should not run it alongside another SDR app (e.g. SpectraSentry) on the same
+dongle simultaneously.</p>

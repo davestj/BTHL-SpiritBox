@@ -41,6 +41,7 @@ struct TranscriptionResult {
     float whisperProbability;   ///< Whisper's own probability estimate
     QString language;           ///< Detected language
     int64_t processingTimeMs;   ///< How long transcription took
+    VoiceSource source{VoiceSource::RadioSweep}; ///< Radio-band response vs investigator microphone
 };
 
 /**

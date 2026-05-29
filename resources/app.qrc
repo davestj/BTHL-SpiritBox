@@ -1,0 +1,14 @@
+<!DOCTYPE RCC>
+<!--
+  Compiled-in application resources: the window/app icon and the loading splash image.
+  Paths are relative to this .qrc file; aliases give clean resource URLs (:/icons/...,
+  :/branding/...). Regenerate the underlying art with assets/branding/generate-assets.sh.
+-->
+<RCC version="1.0">
+  <qresource prefix="/icons">
+    <file alias="icon-512.png">../assets/icons/icon-512.png</file>
+  </qresource>
+  <qresource prefix="/branding">
+    <file alias="splash.png">../assets/branding/splash.png</file>
+  </qresource>
+</RCC>

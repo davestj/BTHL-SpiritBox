@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BTHL-SpiritBox loading splash — 900x560. Same REM-pod / radio-waves motif as the app
+  icon, with the wordmark and version. Rasterized to splash.png by generate-assets.sh.
+-->
+<svg width="900" height="560" viewBox="0 0 900 560" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="sbg" cx="32%" cy="40%" r="90%">
+      <stop offset="0%"  stop-color="#1b2347"/>
+      <stop offset="55%" stop-color="#0d1226"/>
+      <stop offset="100%" stop-color="#04050c"/>
+    </radialGradient>
+    <linearGradient id="sgold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#ffe27a"/>
+      <stop offset="100%" stop-color="#d39a00"/>
+    </linearGradient>
+    <radialGradient id="sorb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#eafdff"/>
+      <stop offset="35%" stop-color="#5ff0ff"/>
+      <stop offset="100%" stop-color="#0bb6cf"/>
+    </radialGradient>
+    <filter id="sglow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="7" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="900" height="560" fill="url(#sbg)"/>
+  <rect x="2" y="2" width="896" height="556" fill="none" stroke="#36e0e0" stroke-opacity="0.25" stroke-width="3"/>
+
+  <!-- Emblem on the left -->
+  <g transform="translate(232,250)">
+    <g fill="none" stroke-linecap="round" filter="url(#sglow)">
+      <circle r="70"  stroke="#36e0e0" stroke-opacity="0.85" stroke-width="8"/>
+      <circle r="120" stroke="#36e0e0" stroke-opacity="0.5"  stroke-width="7"/>
+      <circle r="172" stroke="#ffd700" stroke-opacity="0.32" stroke-width="6"/>
+    </g>
+    <rect x="-10" y="0" width="20" height="150" rx="10" fill="url(#sgold)" filter="url(#sglow)"/>
+    <path d="M-70 150 q70 -40 140 0 q8 56 -70 56 q-78 0 -70 -56 z" fill="url(#sgold)" filter="url(#sglow)"/>
+    <circle r="40" fill="url(#sorb)" filter="url(#sglow)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="446" y="230" font-family="Helvetica, Arial, sans-serif" font-size="54" font-weight="800"
+        fill="#ffffff" letter-spacing="0.5">BTHL<tspan fill="#ffd700">·</tspan>SpiritBox</text>
+  <text x="448" y="270" font-family="Helvetica, Arial, sans-serif" font-size="14" font-weight="600"
+        fill="#36e0e0" letter-spacing="1.5">PARANORMAL INVESTIGATION COMMAND CENTER</text>
+  <text x="448" y="306" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="400"
+        fill="#9aa6c8">SDR Spirit Box · EMF Correlation · AI Voice Detection</text>
+
+  <line x1="448" y1="338" x2="858" y2="338" stroke="#ffd700" stroke-opacity="0.35" stroke-width="2"/>
+  <text x="448" y="378" font-family="Helvetica, Arial, sans-serif" font-size="16" font-weight="600"
+        fill="#ffd700">Beyond The Horizon Labs</text>
+  <text x="858" y="378" text-anchor="end" font-family="Helvetica, Arial, sans-serif" font-size="16"
+        fill="#6f7aa0">v1.0.0</text>
+</svg>

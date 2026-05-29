@@ -42,6 +42,10 @@ public:
     [[nodiscard]] QString sessionDirectory() const;
     [[nodiscard]] uint64_t bytesWritten() const;
 
+    /// We record the active capture mode (Interactive / Standalone / Passive Listen) so the
+    /// session metadata reflects how it was captured. Takes effect on the next startRecording.
+    void setCaptureMode(const QString& mode) { m_captureMode = mode; }
+
 public slots:
     void onSensorReading(const SensorReading& reading);
     void onSensorAnomaly(const SensorReading& reading);
@@ -59,6 +63,7 @@ private:
     void writeEventLine(const QJsonObject& event);
 
     QString m_sessionDir;
+    QString m_captureMode{"Standalone"};
     bool m_recording{false};
     uint64_t m_bytesWritten{0};
 
@@ -70,6 +75,7 @@ private:
     QJsonArray m_correlatedEvents;
 
     uint32_t m_audioSampleRate{16000};
+    bool m_headerWritten{false};
     uint32_t m_audioSamplesWritten{0};
     uint32_t m_snippetCount{0};
     QElapsedTimer m_recordTimer;

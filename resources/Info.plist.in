@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>BTHL-SpiritBox</string>
+    <key>CFBundleDisplayName</key>
+    <string>BTHL-SpiritBox</string>
+    <key>CFBundleExecutable</key>
+    <string>${MACOSX_BUNDLE_EXECUTABLE_NAME}</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.beyondthehorizonlabs.spiritbox</string>
+    <key>CFBundleVersion</key>
+    <string>${MACOSX_BUNDLE_BUNDLE_VERSION}</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${MACOSX_BUNDLE_SHORT_VERSION_STRING}</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleIconFile</key>
+    <string>${MACOSX_BUNDLE_ICON_FILE}</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>LSMinimumSystemVersion</key>
+    <string>12.0</string>
+    <key>NSHumanReadableCopyright</key>
+    <string>© 2026 David St John — Beyond The Horizon Labs</string>
+    <!-- Required so the investigator microphone (Interactive capture mode) can be used. -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>BTHL-SpiritBox records the investigator's spoken questions so they can be transcribed alongside captured responses during an EVP session.</string>
+</dict>
+</plist>

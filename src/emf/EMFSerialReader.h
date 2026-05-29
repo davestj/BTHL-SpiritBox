@@ -31,10 +31,25 @@ namespace bthl::spiritbox {
  */
 struct EMFReading {
     double timestamp;       ///< Session time in seconds
-    double emfMilligauss;   ///< EMF strength in milligauss
-    double efVm;            ///< Electric field in V/m (if available)
-    double rfMwCm2;         ///< RF power density in mW/cm^2 (if available)
+    double emfMilligauss;   ///< EMF strength in milligauss (the value we actually read)
+    double efVm;            ///< Electric field in V/m — NaN when not measured by this firmware
+    double rfMwCm2;         ///< RF power density in mW/cm^2 — NaN when not measured
     bool isSpike;           ///< Whether we consider this an anomalous spike
+};
+
+/**
+ * @struct EmfCapabilities
+ * @purpose We capture what the connected EMF meter actually is and reports, probed from the
+ *          device (firmware version) — not assumed. Used by the Device Capabilities panel.
+ */
+struct EmfCapabilities {
+    bool valid{false};          ///< True once connected and probed
+    QString portName;           ///< Serial port the meter is on
+    QString firmwareVersion;    ///< Firmware string from <GETVER>>
+    int pollingIntervalMs{0};   ///< Active polling cadence
+    bool readsEmf{true};        ///< We read magnetic field (milligauss)
+    bool readsEf{false};        ///< Electric field reading available/parsed
+    bool readsRf{false};        ///< RF power-density reading available/parsed
 };
 
 /**
@@ -111,6 +126,11 @@ public:
      */
     [[nodiscard]] double baselineMilligauss() const;
 
+    /**
+     * @brief We return what we know about the connected meter (firmware, sensors, polling).
+     */
+    [[nodiscard]] EmfCapabilities capabilities() const;
+
 signals:
     /**
      * @brief We emit each new EMF reading
@@ -126,6 +146,11 @@ signals:
      * @brief We emit connection state changes
      */
     void connectionStateChanged(bool connected);
+
+    /**
+     * @brief We emit the meter's probed capabilities once we have its firmware version.
+     */
+    void capabilitiesProbed(const EmfCapabilities& caps);
 
     /**
      * @brief We emit errors
@@ -155,6 +180,10 @@ private:
      */
     void updateBaseline(double emfValue);
 
+    /// We track which command's response we are expecting so a version reply is never
+    /// misread as an EMF float (and vice-versa).
+    enum class Expecting { None, Version, Emf };
+
     QSerialPort* m_serialPort{nullptr};
     QTimer* m_pollTimer{nullptr};
     QElapsedTimer m_sessionTimer;
@@ -167,6 +196,9 @@ private:
 
     QByteArray m_readBuffer;
     bool m_reading{false};
+
+    Expecting m_expecting{Expecting::None};
+    EmfCapabilities m_capabilities;
 };
 
 } // namespace bthl::spiritbox

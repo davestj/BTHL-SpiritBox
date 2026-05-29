@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  BTHL-SpiritBox application icon — REM-pod / radio-waves motif.
+  We author the master as 1024x1024 vector art and rasterize to every platform size
+  via assets/branding/generate-assets.sh. Dark cosmic field, glowing probe emitting
+  concentric wave arcs, BTHL gold + cyan accents.
+-->
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="42%" r="72%">
+      <stop offset="0%"  stop-color="#1b2347"/>
+      <stop offset="55%" stop-color="#0d1226"/>
+      <stop offset="100%" stop-color="#05060f"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%"  stop-color="#ffe27a"/>
+      <stop offset="50%" stop-color="#ffd700"/>
+      <stop offset="100%" stop-color="#d39a00"/>
+    </linearGradient>
+    <radialGradient id="orb" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"  stop-color="#eafdff"/>
+      <stop offset="35%" stop-color="#5ff0ff"/>
+      <stop offset="100%" stop-color="#0bb6cf"/>
+    </radialGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- Rounded-square app tile -->
+  <rect x="0" y="0" width="1024" height="1024" rx="208" ry="208" fill="url(#bg)"/>
+  <rect x="6" y="6" width="1012" height="1012" rx="204" ry="204" fill="none"
+        stroke="#36e0e0" stroke-opacity="0.18" stroke-width="6"/>
+
+  <!-- Concentric radio-wave arcs radiating from the probe tip -->
+  <g fill="none" stroke-linecap="round" filter="url(#glow)">
+    <circle cx="512" cy="372" r="120" stroke="#36e0e0" stroke-opacity="0.85" stroke-width="14"/>
+    <circle cx="512" cy="372" r="200" stroke="#36e0e0" stroke-opacity="0.55" stroke-width="12"/>
+    <circle cx="512" cy="372" r="290" stroke="#ffd700" stroke-opacity="0.40" stroke-width="11"/>
+    <circle cx="512" cy="372" r="392" stroke="#ffd700" stroke-opacity="0.22" stroke-width="10"/>
+  </g>
+
+  <!-- REM-pod probe: shaft + base -->
+  <g filter="url(#glow)">
+    <rect x="496" y="372" width="32" height="356" rx="16" fill="url(#gold)"/>
+    <path d="M392 728 q120 -70 240 0 q14 96 -120 96 q-134 0 -120 -96 z" fill="url(#gold)"/>
+    <ellipse cx="512" cy="824" rx="150" ry="34" fill="#0d1226" stroke="url(#gold)" stroke-width="8"/>
+  </g>
+
+  <!-- Glowing antenna orb (the sensing tip) -->
+  <circle cx="512" cy="372" r="70" fill="url(#orb)" filter="url(#glow)"/>
+  <circle cx="512" cy="372" r="70" fill="none" stroke="#eafdff" stroke-opacity="0.7" stroke-width="4"/>
+
+  <!-- A few stray "spirit" sparks -->
+  <g fill="#36e0e0">
+    <circle cx="250" cy="250" r="7" opacity="0.8"/>
+    <circle cx="790" cy="300" r="6" opacity="0.7"/>
+    <circle cx="300" cy="520" r="5" opacity="0.6"/>
+    <circle cx="742" cy="560" r="7" opacity="0.75"/>
+  </g>
+</svg>

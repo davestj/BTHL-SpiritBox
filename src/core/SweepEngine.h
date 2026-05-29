@@ -44,6 +44,28 @@ struct SdrDeviceInfo {
 };
 
 /**
+ * @struct SdrCapabilities
+ * @purpose We capture what the *actual* connected SDR can physically do, probed directly from
+ *          the hardware via SoapySDR. We use this to skip unreachable frequencies and to expose
+ *          the device's real limits (e.g. an E4000 cannot tune the AM band).
+ */
+struct SdrCapabilities {
+    bool valid{false};          ///< True once we have probed a live device
+    QString driver;             ///< SoapySDR driver (e.g. "rtlsdr")
+    QString hardwareKey;        ///< Hardware key string
+    QString tuner;              ///< Tuner chip (e.g. "Elonics E4000", "Rafael Micro R820T")
+    double freqMinHz{0.0};      ///< Lowest tunable frequency (Hz)
+    double freqMaxHz{0.0};      ///< Highest tunable frequency (Hz)
+    double sampleRateMinHz{0.0};///< Lowest supported sample rate (Hz)
+    double sampleRateMaxHz{0.0};///< Highest supported sample rate (Hz)
+    double gainMinDb{0.0};      ///< Minimum overall gain (dB)
+    double gainMaxDb{0.0};      ///< Maximum overall gain (dB)
+    QStringList gainElements;   ///< Named gain stages the tuner exposes
+    QStringList antennas;       ///< Available antenna ports
+    bool hasAgc{false};         ///< Whether automatic gain control is available
+};
+
+/**
  * @struct SweepStatus
  * @purpose We emit this struct with sweep progress for UI updates
  */
@@ -98,6 +120,12 @@ public:
      * @brief We retrieve the currently opened device info
      */
     [[nodiscard]] SdrDeviceInfo currentDeviceInfo() const;
+
+    /**
+     * @brief We return the capabilities probed from the currently open device.
+     *        Invalid (valid=false) when no device is open.
+     */
+    [[nodiscard]] SdrCapabilities capabilities() const;
 
     // ─── Sweep Control ─────────────────────────────────────────────────────
 
@@ -168,6 +196,11 @@ signals:
     void deviceStateChanged(bool isOpen);
 
     /**
+     * @brief We emit the capabilities we probed right after opening a device.
+     */
+    void capabilitiesProbed(const SdrCapabilities& caps);
+
+    /**
      * @brief We emit signal power measurements for the spectrum visualizer
      * @param freqHz Frequency in Hz
      * @param powerDb Signal power in dBFS
@@ -209,11 +242,18 @@ private:
      */
     void buildStepList();
 
+    /**
+     * @brief We probe the open device's real capabilities via SoapySDR.
+     *        Caller must hold m_deviceMutex.
+     */
+    SdrCapabilities probeCapabilitiesLocked();
+
     // ─── Member Variables ──────────────────────────────────────────────────
 
     SoapySDR::Device* m_device{nullptr};
     SoapySDR::Stream* m_rxStream{nullptr};
     SdrDeviceInfo m_currentDevice;
+    SdrCapabilities m_capabilities;
     SweepProfile m_profile;
 
     /**

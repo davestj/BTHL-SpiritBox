@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Version=1.0
+Name=BTHL-SpiritBox
+GenericName=Paranormal Investigation Command Center
+Comment=SDR spirit box, EMF correlation, and AI voice detection for EVP investigation
+Exec=bthl-spiritbox
+Icon=bthl-spiritbox
+Terminal=false
+Categories=AudioVideo;Audio;Science;HamRadio;
+Keywords=SDR;EVP;EMF;SpiritBox;Paranormal;Whisper;
+StartupNotify=true

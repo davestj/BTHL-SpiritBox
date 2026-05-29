@@ -25,8 +25,59 @@
 #include <QDir>
 #include <QDateTime>
 #include <QUuid>
+#include <QFileInfo>
+#include <QStandardPaths>
+#include <QFile>
+#include <QTextStream>
+#include <QKeySequence>
+#include <QDialog>
+#include <QEvent>
 
 namespace bthl::spiritbox {
+
+namespace {
+
+/// We map a capture mode to a short human/metadata label.
+QString captureModeName(CaptureMode mode) {
+    switch (mode) {
+        case CaptureMode::Interactive:   return QStringLiteral("Interactive");
+        case CaptureMode::Standalone:    return QStringLiteral("Standalone");
+        case CaptureMode::PassiveListen: return QStringLiteral("Passive Listen");
+    }
+    return QStringLiteral("Standalone");
+}
+
+/**
+ * @brief We resolve the default folder for Whisper models.
+ *
+ * We prefer the project's bundled models/ directory so the file picker opens straight
+ * to the downloaded models. We probe, in order: an explicit BTHL_SPIRITBOX_MODELS
+ * override, then models/ next to the executable, then models/ one level up (the layout
+ * when running from build/), then the source-tree models/. We fall back to the user's
+ * home directory if none exist.
+ */
+QString resolveDefaultModelDir() {
+    const QByteArray override = qgetenv("BTHL_SPIRITBOX_MODELS");
+    if (!override.isEmpty() && QFileInfo::exists(QString::fromLocal8Bit(override))) {
+        return QString::fromLocal8Bit(override);
+    }
+
+    const QString appDir = QCoreApplication::applicationDirPath();
+    const QStringList candidates = {
+        appDir + "/models",
+        appDir + "/../models",
+        QStringLiteral(BTHL_SPIRITBOX_SOURCE_DIR) + "/models",
+    };
+    for (const QString& path : candidates) {
+        const QString canonical = QDir(path).canonicalPath();
+        if (!canonical.isEmpty() && QFileInfo(canonical).isDir()) {
+            return canonical;
+        }
+    }
+    return QDir::homePath();
+}
+
+} // namespace
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -34,6 +85,8 @@ MainWindow::MainWindow(QWidget* parent)
     , m_demodulator(std::make_unique<AudioDemodulator>())
     , m_audioOutput(std::make_unique<AudioOutputManager>())
     , m_vad(std::make_unique<VoiceActivityDetector>())
+    , m_micInput(std::make_unique<MicrophoneInput>())
+    , m_investigatorVad(std::make_unique<VoiceActivityDetector>())
     , m_whisper(std::make_unique<WhisperTranscriber>())
     , m_emfReader(std::make_unique<EMFSerialReader>())
     , m_correlator(std::make_unique<EMFCorrelator>())
@@ -52,6 +105,7 @@ MainWindow::MainWindow(QWidget* parent)
     createEMFDock();
     createTranscriptionDock();
     createStatusBar();
+    installDockRedockBehavior();
     wireSignals();
     loadDefaultProfile();
 
@@ -103,22 +157,63 @@ MainWindow::~MainWindow() {
     m_emfReader->disconnectDevice();
 }
 
+// ─── Dock behavior ───────────────────────────────────────────────────────────────
+
+void MainWindow::installDockRedockBehavior() {
+    // We record each dock's home area and watch it, so closing re-docks instead of hiding.
+    const auto docks = findChildren<QDockWidget*>();
+    for (QDockWidget* dock : docks) {
+        Qt::DockWidgetArea area = dockWidgetArea(dock);
+        if (area == Qt::NoDockWidgetArea) {
+            area = Qt::BottomDockWidgetArea;  // Sensible fallback for an initially-floating dock
+        }
+        m_dockHomeAreas.insert(dock, area);
+        dock->installEventFilter(this);
+    }
+}
+
+bool MainWindow::eventFilter(QObject* watched, QEvent* event) {
+    if (event->type() == QEvent::Close) {
+        if (auto* dock = qobject_cast<QDockWidget*>(watched)) {
+            // We snap the panel back into its home dock area rather than letting it disappear.
+            event->ignore();
+            if (dock->isFloating()) {
+                dock->setFloating(false);
+            }
+            if (dockWidgetArea(dock) == Qt::NoDockWidgetArea) {
+                addDockWidget(m_dockHomeAreas.value(dock, Qt::BottomDockWidgetArea), dock);
+            }
+            dock->show();
+            dock->raise();
+            return true;  // We consume the event so the dock is never actually closed
+        }
+    }
+    return QMainWindow::eventFilter(watched, event);
+}
+
 // ─── Menu Bar ──────────────────────────────────────────────────────────────────
 
 void MainWindow::createMenuBar() {
     auto* fileMenu = menuBar()->addMenu("&File");
     fileMenu->addAction("&Load Session...", this, &MainWindow::onLoadSession);
+    fileMenu->addAction("&Save Transcript...", this, &MainWindow::onSaveTranscript);
     fileMenu->addSeparator();
     fileMenu->addAction("E&xit", qApp, &QApplication::quit);
 
     auto* deviceMenu = menuBar()->addMenu("&Devices");
     deviceMenu->addAction("Refresh &SDR Devices", this, &MainWindow::onRefreshSDRDevices);
     deviceMenu->addAction("Refresh &EMF Ports", this, &MainWindow::onRefreshEMFPorts);
+    deviceMenu->addSeparator();
+    deviceMenu->addAction("Device &Capabilities…", this, &MainWindow::onShowDeviceCapabilities);
 
     auto* whisperMenu = menuBar()->addMenu("&Whisper");
-    whisperMenu->addAction("&Load Model...", this, &MainWindow::onLoadWhisperModel);
+    whisperMenu->addAction("&Load / Switch Model…", this, &MainWindow::onLoadWhisperModel);
+    whisperMenu->addAction("&Unload Model", this, &MainWindow::onUnloadWhisperModel);
 
     auto* helpMenu = menuBar()->addMenu("&Help");
+    helpMenu->addAction("&Documentation", QKeySequence::HelpContents,
+                        this, &MainWindow::onShowDocumentation);
+    helpMenu->addSeparator();
     helpMenu->addAction("&About", [this]() {
         QMessageBox::about(this, "About BTHL-SpiritBox",
             "BTHL-SpiritBox v1.0.0\n\n"
@@ -240,6 +335,8 @@ void MainWindow::createControlDock() {
     m_profileCombo->addItem("FM Broadcast (88-108 MHz)");
     m_profileCombo->addItem("VHF Low Band (30-88 MHz)");
     m_profileCombo->addItem("Full Spectrum (AM+VHF+FM)");
+    m_profileCombo->addItem("AM + FM Broadcast (no VHF)");
+    m_profileCombo->addItem("Ghost Sweep (device-wide)");
     m_profileCombo->setCurrentIndex(1);  // FM default
     m_profileCombo->blockSignals(false);
     connect(m_profileCombo, QOverload<int>::of(&QComboBox::currentIndexChanged),
@@ -289,8 +386,9 @@ void MainWindow::createDetectionDock() {
     dock->setWidget(m_detectionLogWidget);
 
     /// We also keep the simple text log for backward compatibility
-    m_detectionLog = new QTextEdit();
+    m_detectionLog = new QPlainTextEdit();
     m_detectionLog->setReadOnly(true);
+    m_detectionLog->setMaximumBlockCount(2000);  // We cap log size to keep appends fast and safe
     m_detectionLog->setVisible(false);
 
     addDockWidget(Qt::BottomDockWidgetArea, dock);
@@ -344,14 +442,60 @@ void MainWindow::createTranscriptionDock() {
     auto* widget = new QWidget();
     auto* layout = new QVBoxLayout(widget);
 
+    // We lay the transcription controls out in a row above the log.
+    auto* controls = new QHBoxLayout();
+
     m_loadModelBtn = new QPushButton("Load Whisper Model...");
     connect(m_loadModelBtn, &QPushButton::clicked, this, &MainWindow::onLoadWhisperModel);
-    layout->addWidget(m_loadModelBtn);
+    controls->addWidget(m_loadModelBtn);
 
-    m_transcriptionLog = new QTextEdit();
+    // We let the investigator unload / switch the active model. Disabled until one is loaded.
+    m_unloadModelBtn = new QPushButton("Unload");
+    m_unloadModelBtn->setEnabled(false);
+    connect(m_unloadModelBtn, &QPushButton::clicked, this, &MainWindow::onUnloadWhisperModel);
+    controls->addWidget(m_unloadModelBtn);
+
+    // We let the investigator save the full Q&A transcript to a text file at any time.
+    m_saveTranscriptBtn = new QPushButton("Save Transcript...");
+    connect(m_saveTranscriptBtn, &QPushButton::clicked, this, &MainWindow::onSaveTranscript);
+    controls->addWidget(m_saveTranscriptBtn);
+
+    layout->addLayout(controls);
+
+    // ─── Capture-mode selector ─────────────────────────────────────────────
+    // Interactive captures the investigator's mic (questions + responses); Standalone and
+    // Passive Listen leave the mic off (responses only). Exactly one mode is active.
+    auto* modeRow = new QHBoxLayout();
+    auto* modeLabel = new QLabel("Capture:");
+    modeRow->addWidget(modeLabel);
+
+    m_modeGroup = new QButtonGroup(this);
+    m_modeGroup->setExclusive(true);
+
+    m_modeInteractiveBtn = new QPushButton("Interactive (mic)");
+    m_modeStandaloneBtn  = new QPushButton("Standalone");
+    m_modePassiveBtn     = new QPushButton("Passive Listen");
+    for (QPushButton* b : {m_modeInteractiveBtn, m_modeStandaloneBtn, m_modePassiveBtn}) {
+        b->setCheckable(true);
+        m_modeGroup->addButton(b);
+        modeRow->addWidget(b);
+    }
+    m_modeStandaloneBtn->setChecked(true);  // We default to Standalone (responses only)
+    modeRow->addStretch();
+    layout->addLayout(modeRow);
+
+    connect(m_modeInteractiveBtn, &QPushButton::clicked, this,
+            [this]() { onCaptureModeChanged(CaptureMode::Interactive); });
+    connect(m_modeStandaloneBtn, &QPushButton::clicked, this,
+            [this]() { onCaptureModeChanged(CaptureMode::Standalone); });
+    connect(m_modePassiveBtn, &QPushButton::clicked, this,
+            [this]() { onCaptureModeChanged(CaptureMode::PassiveListen); });
+
+    m_transcriptionLog = new QPlainTextEdit();
     m_transcriptionLog->setReadOnly(true);
+    m_transcriptionLog->setMaximumBlockCount(2000);  // We cap log size to keep appends fast and safe
     m_transcriptionLog->setFont(QFont("Courier", 11));
-    m_transcriptionLog->setStyleSheet("QTextEdit { background-color: #0d1117; color: #ffd700; }");
+    m_transcriptionLog->setStyleSheet("QPlainTextEdit { background-color: #0d1117; color: #ffd700; }");
     layout->addWidget(m_transcriptionLog);
 
     dock->setWidget(widget);
@@ -365,11 +509,13 @@ void MainWindow::createStatusBar() {
     m_statusEMF = new QLabel("EMF: N/A");
     m_statusVAD = new QLabel("VAD: Idle");
     m_statusRecording = new QLabel("REC: Off");
+    m_statusMode = new QLabel("MODE: Standalone");
 
     statusBar()->addPermanentWidget(m_statusFreq);
     statusBar()->addPermanentWidget(m_statusEMF);
     statusBar()->addPermanentWidget(m_statusVAD);
     statusBar()->addPermanentWidget(m_statusRecording);
+    statusBar()->addPermanentWidget(m_statusMode);
 
     m_statusTimer = new QTimer(this);
     connect(m_statusTimer, &QTimer::timeout, this, &MainWindow::onUpdateStatusBar);
@@ -400,6 +546,30 @@ void MainWindow::wireSignals() {
     // We connect VAD detections to the EMF correlator
     connect(m_vad.get(), &VoiceActivityDetector::voiceDetected,
             m_correlator.get(), &EMFCorrelator::onVoiceDetected);
+
+    // ─── Investigator Microphone Path ──────────────────────────────────────
+    // We tag this detector's events as investigator speech and feed it from the mic
+    // at 16 kHz mono. Its detections share the Whisper transcriber so the investigator's
+    // spoken questions land in the same transcript as the radio-band responses — but we
+    // deliberately do NOT route them to the EMF correlator (the correlator also ignores
+    // investigator-sourced transcriptions, so questions are never mislabeled as EVP).
+    m_investigatorVad->setSource(VoiceSource::Investigator);
+    m_investigatorVad->setSampleRate(MicrophoneInput::kTargetSampleRate);
+
+    connect(m_micInput.get(), &MicrophoneInput::audioReady,
+            [this](const std::vector<float>& samples, uint32_t rate) {
+                m_investigatorVad->processAudio(samples, 0.0, rate);
+                m_audioWaveform->addAudioSamples(samples);
+            });
+
+    connect(m_investigatorVad.get(), &VoiceActivityDetector::voiceDetected,
+            m_whisper.get(), &WhisperTranscriber::onVoiceDetected);
+
+    connect(m_micInput.get(), &MicrophoneInput::errorOccurred,
+            [this](const QString& msg) {
+                statusBar()->showMessage("Microphone: " + msg, 5000);
+                qWarning() << "MicrophoneInput error:" << msg;
+            });
 
     // We connect EMF spikes to the correlator
     connect(m_emfReader.get(), &EMFSerialReader::spikeDetected,
@@ -464,9 +634,10 @@ void MainWindow::wireSignals() {
 
     // ─── Visualization Widget Connections (Phase 2) ───────────────────────
 
-    /// We feed spectrum power data to the waterfall visualizer
-    /// We use sweepStatusUpdated which gives us freq, power, step, and total
-    connect(m_sweepEngine.get(), &SweepEngine::sweepStatusUpdated,
+    /// We feed spectrum power data to the waterfall visualizer.
+    /// We pass `this` as the connection context so this runs on the GUI thread (queued from the
+    /// sweep worker thread) — widget updates must happen on the GUI thread.
+    connect(m_sweepEngine.get(), &SweepEngine::sweepStatusUpdated, this,
             [this](const SweepStatus& status) {
                 m_sweepVisualizer->addSweepData(status.currentFreqHz,
                     status.signalPowerDb, status.currentStep, status.totalSteps);
@@ -482,9 +653,12 @@ void MainWindow::wireSignals() {
     connect(m_vad.get(), &VoiceActivityDetector::metricsUpdated,
             m_audioWaveform, &AudioWaveformWidget::setVADMetrics);
 
-    /// We feed EMF readings to the timeline widget (if created in dock)
+    /// We feed EMF readings to the timeline widget (if created in dock).
+    /// All widget-updating lambdas below pass `this` as the connection context so they run on
+    /// the GUI thread — several of these source signals (notably transcriptionReady) are emitted
+    /// from worker threads, and mutating a widget off the GUI thread corrupts it / crashes.
     if (m_emfTimeline) {
-        connect(m_emfReader.get(), &EMFSerialReader::readingReceived,
+        connect(m_emfReader.get(), &EMFSerialReader::readingReceived, this,
                 [this](const EMFReading& reading) {
                     m_emfTimeline->addReading(reading.timestamp, reading.emfMilligauss,
                                               reading.isSpike);
@@ -493,19 +667,19 @@ void MainWindow::wireSignals() {
 
     /// We feed detection events to the filterable detection log widget
     if (m_detectionLogWidget) {
-        connect(m_vad.get(), &VoiceActivityDetector::voiceDetected,
+        connect(m_vad.get(), &VoiceActivityDetector::voiceDetected, this,
                 [this](const VoiceDetectionEvent& event) {
                     m_detectionLogWidget->addVoiceEvent(event.timestamp,
                         event.frequencyHz, event.confidence);
                 });
 
-        connect(m_whisper.get(), &WhisperTranscriber::transcriptionReady,
+        connect(m_whisper.get(), &WhisperTranscriber::transcriptionReady, this,
                 [this](const TranscriptionResult& result) {
                     m_detectionLogWidget->addTranscription(result.timestamp,
                         result.text, result.confidence);
                 });
 
-        connect(m_correlator.get(), &EMFCorrelator::correlatedEventDetected,
+        connect(m_correlator.get(), &EMFCorrelator::correlatedEventDetected, this,
                 [this](const CorrelatedEvent& event) {
                     QString desc = QString("EMF %1 mG + Voice %2% @ %3 MHz (dt=%4ms, score=%5)")
                         .arg(event.emfReading.emfMilligauss, 0, 'f', 1)
@@ -516,7 +690,7 @@ void MainWindow::wireSignals() {
                     m_detectionLogWidget->addCorrelation(event.timestamp, desc);
                 });
 
-        connect(m_emfReader.get(), &EMFSerialReader::spikeDetected,
+        connect(m_emfReader.get(), &EMFSerialReader::spikeDetected, this,
                 [this](const EMFReading& reading) {
                     m_detectionLogWidget->addEMFSpike(reading.timestamp,
                         reading.emfMilligauss);
@@ -623,6 +797,8 @@ void MainWindow::onProfileChanged(int index) {
         case 1: profile = SweepProfile::createFMBroadcast(); break;
         case 2: profile = SweepProfile::createVHFLow(); break;
         case 3: profile = SweepProfile::createFullSpectrum(); break;
+        case 4: profile = SweepProfile::createAMFMBroadcast(); break;
+        case 5: profile = SweepProfile::createGhostSweep(); break;
         default: return;
     }
 
@@ -695,15 +871,214 @@ void MainWindow::onLoadSession() {
 }
 
 void MainWindow::onLoadWhisperModel() {
-    QString modelPath = QFileDialog::getOpenFileName(this, "Load Whisper Model",
-        QDir::homePath(), "Whisper Models (*.bin)");
-    if (!modelPath.isEmpty()) {
-        if (m_whisper->loadModel(modelPath)) {
-            m_loadModelBtn->setText("Model Loaded");
-            m_loadModelBtn->setEnabled(false);
-            statusBar()->showMessage("We loaded the Whisper model successfully", 3000);
-        }
+    QString modelPath = QFileDialog::getOpenFileName(this, "Load / Switch Whisper Model",
+        resolveDefaultModelDir(), "Whisper Models (*.bin)");
+    if (modelPath.isEmpty()) return;
+
+    // loadModel() frees any previously loaded model first, so this also handles switching.
+    if (m_whisper->loadModel(modelPath)) {
+        const QString name = QFileInfo(modelPath).fileName();
+        m_loadModelBtn->setText("Model: " + name + "  (switch…)");
+        m_loadModelBtn->setEnabled(true);   // We keep this enabled so the user can switch any time
+        m_unloadModelBtn->setEnabled(true);
+        statusBar()->showMessage("Loaded model: " + name, 3000);
+    } else {
+        QMessageBox::warning(this, "Load Model",
+            "We could not load that model file. Please choose a valid Whisper .bin model.");
     }
+}
+
+void MainWindow::onUnloadWhisperModel() {
+    if (!m_whisper->isModelLoaded()) {
+        statusBar()->showMessage("No model is loaded.", 2000);
+        return;
+    }
+    m_whisper->unloadModel();
+    m_loadModelBtn->setText("Load Whisper Model...");
+    m_loadModelBtn->setEnabled(true);
+    m_unloadModelBtn->setEnabled(false);
+    statusBar()->showMessage("Whisper model unloaded — transcription paused until you load one.", 4000);
+}
+
+void MainWindow::onCaptureModeChanged(CaptureMode mode) {
+    m_captureMode = mode;
+    m_recorder->setCaptureMode(captureModeName(mode));
+
+    switch (mode) {
+        case CaptureMode::Interactive: {
+            // We capture the investigator's mic so their questions get transcribed alongside
+            // the radio responses.
+            if (!m_whisper->isModelLoaded()) {
+                statusBar()->showMessage(
+                    "Interactive mode: no Whisper model loaded yet — load one to transcribe questions.",
+                    5000);
+            }
+            if (m_micInput->start()) {
+                statusBar()->showMessage("Interactive mode — mic: " + m_micInput->deviceName(), 3000);
+            } else {
+                // We could not open the mic; fall back to Standalone so the UI stays honest.
+                m_captureMode = CaptureMode::Standalone;
+                m_recorder->setCaptureMode(captureModeName(m_captureMode));
+                m_modeStandaloneBtn->setChecked(true);
+                statusBar()->showMessage("Microphone unavailable — staying in Standalone mode", 5000);
+            }
+            break;
+        }
+        case CaptureMode::Standalone:
+            m_micInput->stop();
+            statusBar()->showMessage("Standalone mode — responses only (mic off)", 3000);
+            break;
+        case CaptureMode::PassiveListen:
+            m_micInput->stop();
+            statusBar()->showMessage("Passive Listen — continuous, spontaneous responses (mic off)", 3000);
+            break;
+    }
+    m_statusMode->setText("MODE: " + captureModeName(m_captureMode));
+}
+
+void MainWindow::onShowDocumentation() {
+    // We create the documentation browser lazily and reuse it thereafter.
+    if (!m_helpBrowser) {
+        m_helpBrowser = std::make_unique<HelpBrowser>();
+    }
+    m_helpBrowser->show();
+    m_helpBrowser->raise();
+    m_helpBrowser->activateWindow();
+}
+
+void MainWindow::onShowDeviceCapabilities() {
+    // We probe the live hardware right now and present only real, measured capabilities.
+    const SdrCapabilities sdr = m_sweepEngine->capabilities();
+    const MicCapabilities mic = MicrophoneInput::probeDefaultDevice();
+    const EmfCapabilities emf = m_emfReader->capabilities();
+
+    auto fmtMHz = [](double hz) {
+        if (hz <= 0.0) return QStringLiteral("—");
+        return QString::number(hz / 1e6, 'f', 3) + " MHz";
+    };
+    auto row = [](const QString& k, const QString& v) {
+        return QString("<tr><td style='color:#9aa6c8;padding:2px 14px 2px 0'>%1</td>"
+                       "<td style='color:#e7ecf7'>%2</td></tr>").arg(k, v.toHtmlEscaped());
+    };
+
+    QString html = "<div style='font-family:-apple-system,Helvetica,Arial;color:#e7ecf7'>";
+
+    // ─── SDR ───
+    html += "<h2 style='color:#ffd700'>SDR — Software-Defined Radio</h2>";
+    if (sdr.valid) {
+        html += "<table>";
+        html += row("Driver", sdr.driver);
+        html += row("Hardware", sdr.hardwareKey);
+        html += row("Tuner", sdr.tuner.isEmpty() ? "(unreported)" : sdr.tuner);
+        html += row("Tunable range", fmtMHz(sdr.freqMinHz) + "  –  " + fmtMHz(sdr.freqMaxHz));
+        html += row("Sample rate", QString("%1 – %2 MS/s")
+                    .arg(sdr.sampleRateMinHz / 1e6, 0, 'f', 3).arg(sdr.sampleRateMaxHz / 1e6, 0, 'f', 3));
+        html += row("Gain range", QString("%1 – %2 dB").arg(sdr.gainMinDb, 0, 'f', 1).arg(sdr.gainMaxDb, 0, 'f', 1));
+        html += row("Gain stages", sdr.gainElements.isEmpty() ? "—" : sdr.gainElements.join(", "));
+        html += row("Antennas", sdr.antennas.isEmpty() ? "—" : sdr.antennas.join(", "));
+        html += row("Auto gain (AGC)", sdr.hasAgc ? "Yes" : "No");
+        html += "</table>";
+        html += "<p style='color:#9aa6c8'>The Ghost Sweep profile auto-clips to this range; "
+                "frequencies outside it are skipped.</p>";
+    } else {
+        html += "<p style='color:#ff6b6b'>No SDR connected. Plug in your dongle and use "
+                "Devices → Refresh SDR Devices.</p>";
+    }
+
+    // ─── Microphone ───
+    html += "<h2 style='color:#ffd700'>Microphone</h2>";
+    if (mic.valid) {
+        html += "<table>";
+        html += row("Device", mic.deviceName);
+        html += row("Preferred rate", QString::number(mic.preferredSampleRate) + " Hz");
+        html += row("Sample-rate range", QString("%1 – %2 Hz").arg(mic.minSampleRate).arg(mic.maxSampleRate));
+        html += row("Channels", QString("%1 – %2").arg(mic.minChannels).arg(mic.maxChannels));
+        html += row("Formats", mic.sampleFormats.isEmpty() ? "—" : mic.sampleFormats.join(", "));
+        html += "</table>";
+        html += "<p style='color:#9aa6c8'>Captured audio is converted to 16 kHz mono for the "
+                "speech model.</p>";
+    } else {
+        html += "<p style='color:#ff6b6b'>No microphone detected.</p>";
+    }
+
+    // ─── EMF ───
+    html += "<h2 style='color:#ffd700'>EMF Meter (GQ EMF-390)</h2>";
+    if (emf.valid) {
+        html += "<table>";
+        html += row("Port", emf.portName);
+        html += row("Firmware", emf.firmwareVersion);
+        html += row("Polling", QString::number(emf.pollingIntervalMs) + " ms");
+        html += row("Magnetic field (mG)", emf.readsEmf ? "Yes — recorded" : "No");
+        html += row("Electric field (V/m)", emf.readsEf ? "Yes" : "Not reported by this firmware");
+        html += row("RF power (mW/cm²)", emf.readsRf ? "Yes" : "Not reported by this firmware");
+        html += "</table>";
+        html += "<p style='color:#9aa6c8'>Unreported sensors are recorded as empty — never as a "
+                "fabricated zero.</p>";
+    } else {
+        html += "<p style='color:#ff6b6b'>No EMF meter connected. Connect a GQ EMF-390 and use "
+                "Devices → Refresh EMF Ports.</p>";
+    }
+
+    html += "</div>";
+
+    QDialog dlg(this);
+    dlg.setWindowTitle("Device Capabilities");
+    dlg.resize(640, 620);
+    auto* layout = new QVBoxLayout(&dlg);
+    auto* view = new QTextEdit(&dlg);
+    view->setReadOnly(true);
+    view->setStyleSheet("QTextEdit { background:#0d1226; border:0; padding:8px; }");
+    view->setHtml(html);
+    layout->addWidget(view);
+    auto* refreshBtn = new QPushButton("Re-probe", &dlg);
+    connect(refreshBtn, &QPushButton::clicked, &dlg, [this, &dlg]() {
+        dlg.accept();
+        onShowDeviceCapabilities();  // Re-open with a fresh probe
+    });
+    layout->addWidget(refreshBtn);
+    dlg.exec();
+}
+
+void MainWindow::onSaveTranscript() {
+    const QString transcript = m_transcriptionLog->toPlainText();
+    if (transcript.trimmed().isEmpty()) {
+        QMessageBox::information(this, "Save Transcript",
+            "The transcript is empty — there is nothing to save yet.\n\n"
+            "Load a Whisper model and run a sweep (and/or enable the investigator mic) "
+            "to generate transcriptions.");
+        return;
+    }
+
+    // We default to a timestamped filename in the user's session folder.
+    const QString stamp = QDateTime::currentDateTime().toString("yyyyMMdd-HHmmss");
+    const QString defaultDir = QDir::homePath() + "/BTHL-SpiritBox/sessions";
+    QDir().mkpath(defaultDir);
+    const QString suggested = defaultDir + "/transcript-" + stamp + ".txt";
+
+    QString path = QFileDialog::getSaveFileName(this, "Save Transcript",
+        suggested, "Text Files (*.txt);;All Files (*)");
+    if (path.isEmpty()) return;
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::warning(this, "Save Transcript",
+            "We could not open the file for writing:\n" + path);
+        return;
+    }
+
+    QTextStream out(&file);
+    out << "BTHL-SpiritBox Investigation Transcript\n";
+    out << "Beyond The Horizon Labs\n";
+    out << "Saved: " << QDateTime::currentDateTime().toString(Qt::ISODate) << "\n";
+    out << "Whisper model: "
+        << (m_whisper->isModelLoaded() ? m_whisper->modelPath() : QStringLiteral("(none loaded)"))
+        << "\n";
+    out << QString(60, '=') << "\n\n";
+    out << transcript << "\n";
+    file.close();
+
+    statusBar()->showMessage("Transcript saved: " + path, 5000);
+    qInfo() << "MainWindow: We saved the transcript to" << path;
 }
 
 void MainWindow::onSweepStatusUpdated(const SweepStatus& status) {
@@ -723,18 +1098,28 @@ void MainWindow::onVoiceDetected(const VoiceDetectionEvent& event) {
         .arg(event.confidence, 0, 'f', 3)
         .arg(event.energyDb, 0, 'f', 1);
 
-    m_detectionLog->append(entry);
+    m_detectionLog->appendPlainText(entry);
 }
 
 void MainWindow::onTranscriptionReady(const TranscriptionResult& result) {
-    QString entry = QString("[%1s] @ %2 MHz: \"%3\" (prob: %4, %5ms)")
-        .arg(result.timestamp, 8, 'f', 2)
-        .arg(result.frequencyHz / 1e6, 0, 'f', 3)
-        .arg(result.text)
-        .arg(result.whisperProbability, 0, 'f', 3)
-        .arg(result.processingTimeMs);
+    QString entry;
+    if (result.source == VoiceSource::Investigator) {
+        // We label the investigator's spoken questions distinctly from radio responses.
+        entry = QString("[%1s] INVESTIGATOR: \"%2\" (prob: %3, %4ms)")
+            .arg(result.timestamp, 8, 'f', 2)
+            .arg(result.text)
+            .arg(result.whisperProbability, 0, 'f', 3)
+            .arg(result.processingTimeMs);
+    } else {
+        entry = QString("[%1s] RESPONSE @ %2 MHz: \"%3\" (prob: %4, %5ms)")
+            .arg(result.timestamp, 8, 'f', 2)
+            .arg(result.frequencyHz / 1e6, 0, 'f', 3)
+            .arg(result.text)
+            .arg(result.whisperProbability, 0, 'f', 3)
+            .arg(result.processingTimeMs);
+    }
 
-    m_transcriptionLog->append(entry);
+    m_transcriptionLog->appendPlainText(entry);
 }
 
 void MainWindow::onCorrelatedEvent(const CorrelatedEvent& event) {
@@ -752,8 +1137,8 @@ void MainWindow::onCorrelatedEvent(const CorrelatedEvent& event) {
         entry += QString("\n  Transcription: \"%1\"").arg(event.transcription.text);
     }
 
-    m_detectionLog->append(entry);
-    m_transcriptionLog->append(entry);
+    m_detectionLog->appendPlainText(entry);
+    m_transcriptionLog->appendPlainText(entry);
 }
 
 void MainWindow::onVADMetricsUpdated(float energy, float /*zcr*/,

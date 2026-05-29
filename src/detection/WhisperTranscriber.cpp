@@ -194,6 +194,7 @@ void WhisperTranscriber::performTranscription(const std::vector<float>& audioDat
         result.whisperProbability = avgProbability;
         result.language = m_language;
         result.processingTimeMs = timer.elapsed();
+        result.source = event.source;
 
         qInfo() << "WhisperTranscriber: We transcribed at"
                 << event.frequencyHz / 1e6 << "MHz:"

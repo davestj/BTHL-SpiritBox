@@ -41,6 +41,12 @@ sessions/
 models/
 *.bin
 
+# Generated raster branding — regenerate with assets/branding/generate-assets.sh.
+# We keep the SVG sources, the generator script, and the .desktop entry in git.
+assets/icons/
+assets/branding/splash.png
+assets/linux/*.png
+
 # Environment / Secrets
 .env
 *.pem

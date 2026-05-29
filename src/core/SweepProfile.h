@@ -164,8 +164,10 @@ public:
 
     static SweepProfile createAMBroadcast();
     static SweepProfile createFMBroadcast();
+    static SweepProfile createAMFMBroadcast();
     static SweepProfile createFullSpectrum();
     static SweepProfile createVHFLow();
+    static SweepProfile createGhostSweep();
 
 private:
     QString m_name{"Untitled"};

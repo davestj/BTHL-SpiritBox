@@ -57,6 +57,14 @@ bool VoiceActivityDetector::isEnabled() const {
     return m_enabled;
 }
 
+void VoiceActivityDetector::setSource(VoiceSource source) {
+    m_source = source;
+}
+
+VoiceSource VoiceActivityDetector::source() const {
+    return m_source;
+}
+
 void VoiceActivityDetector::processAudio(const std::vector<float>& samples,
                                           double freqHz, uint32_t sampleRate) {
     if (!m_enabled || samples.empty()) return;
@@ -102,6 +110,7 @@ void VoiceActivityDetector::processAudio(const std::vector<float>& samples,
             event.energyDb = energyDb;
             event.zeroCrossingRate = zcr;
             event.spectralFlatness = flatness;
+            event.source = m_source;
 
             // We capture the snippet buffer for Whisper analysis
             event.audioSnippet.assign(m_snippetBuffer.begin(), m_snippetBuffer.end());

@@ -49,7 +49,7 @@ void SweepVisualizerWidget::paintEvent(QPaintEvent*) {
     p.fillRect(0, 0, w, h, QColor(10, 10, 26));
 
     std::lock_guard<std::mutex> lock(mutex_);
-    if (waterfall_rows_.empty()) {
+    if (waterfall_rows_.empty() && current_row_.empty()) {
         p.setPen(QColor(80, 80, 100));
         p.setFont(QFont("Monospace", 11));
         p.drawText(rect(), Qt::AlignCenter, "Waiting for sweep data...");
@@ -61,18 +61,40 @@ void SweepVisualizerWidget::paintEvent(QPaintEvent*) {
     p.drawText(8, 16, "Spectrum Waterfall");
 
     int plotY = 24, plotH = h - 28;
-    size_t numRows = waterfall_rows_.size();
-    double rh = std::max(1.0, static_cast<double>(plotH) / numRows);
 
-    for (size_t r = 0; r < numRows; ++r) {
-        const auto& row = waterfall_rows_[r];
+    // We always show the in-progress sweep as the top row so the display updates live (one
+    // cell per frequency step) instead of only refreshing once a full sweep completes. We then
+    // scroll the completed rows beneath it.
+    const bool hasPartial = !current_row_.empty();
+    size_t numRows = waterfall_rows_.size() + (hasPartial ? 1 : 0);
+    if (numRows == 0) return;
+    double rh = std::max(1.0, static_cast<double>(plotH) / static_cast<double>(numRows));
+
+    // We size cells against the expected steps-per-sweep so the partial row stays aligned
+    // with completed rows as it fills.
+    const size_t cols = expected_steps_ > 0
+        ? expected_steps_
+        : std::max<size_t>(current_row_.size(), 1);
+
+    auto drawRow = [&](const std::vector<double>& row, int y) {
+        if (y >= h) return;
+        const int cellH = std::max(1, static_cast<int>(rh));
+        for (size_t s = 0; s < row.size(); ++s) {
+            int x = static_cast<int>(static_cast<double>(w) * static_cast<double>(s) / cols);
+            int cw = std::max(1, static_cast<int>(static_cast<double>(w) / cols) + 1);
+            p.fillRect(x, y, cw, cellH, powerToColor(row[s]));
+        }
+    };
+
+    size_t r = 0;
+    if (hasPartial) {
+        drawRow(current_row_, plotY);  // newest, still-filling sweep at the top
+        r = 1;
+    }
+    for (size_t i = 0; i < waterfall_rows_.size(); ++i, ++r) {
         int y = plotY + static_cast<int>(r * rh);
         if (y >= h) break;
-        for (size_t s = 0; s < row.size(); ++s) {
-            int x = static_cast<int>(static_cast<double>(w) * s / row.size());
-            int cw = std::max(1, w / static_cast<int>(row.size()));
-            p.fillRect(x, y, cw, std::max(1, static_cast<int>(rh)), powerToColor(row[s]));
-        }
+        drawRow(waterfall_rows_[i], y);
     }
 }
 

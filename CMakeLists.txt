@@ -37,7 +37,8 @@ endif()
 
 # ─── Dependencies ───────────────────────────────────────────────────────────
 
-# Qt6 - We use Widgets, Multimedia, SerialPort, Charts, and Concurrent
+# Qt6 - We use Widgets, Multimedia, SerialPort, Charts, Concurrent, and WebEngineWidgets
+# (WebEngineWidgets powers the in-app documentation browser).
 find_package(Qt6 REQUIRED COMPONENTS
     Widgets
     Multimedia
@@ -45,6 +46,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Charts
     Concurrent
     Core
+    WebEngineWidgets
 )
 
 # SoapySDR - We use the multi-device abstraction layer for SDR hardware
@@ -80,6 +82,7 @@ set(CORE_SOURCES
 set(AUDIO_SOURCES
     src/audio/AudioRingBuffer.cpp
     src/audio/AudioOutputManager.cpp
+    src/audio/MicrophoneInput.cpp
 )
 
 set(DETECTION_SOURCES
@@ -99,6 +102,7 @@ set(SESSION_SOURCES
 
 set(UI_SOURCES
     src/ui/MainWindow.cpp
+    src/ui/HelpBrowser.cpp
     src/ui/SweepVisualizerWidget.cpp
     src/ui/EMFTimelineWidget.cpp
     src/ui/AudioWaveformWidget.cpp
@@ -128,7 +132,8 @@ set(ALL_SOURCES
 
 # ─── Executable ─────────────────────────────────────────────────────────────
 
-add_executable(${PROJECT_NAME} ${ALL_SOURCES})
+# We compile the window icon + splash into the binary via the Qt resource (AUTORCC).
+add_executable(${PROJECT_NAME} ${ALL_SOURCES} resources/app.qrc)
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_SOURCE_DIR}/src
@@ -143,6 +148,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Charts
     Qt6::Concurrent
     Qt6::Core
+    Qt6::WebEngineWidgets
     SoapySDR
     ${PORTAUDIO_LINK_LIBRARIES}
 )
@@ -158,6 +164,37 @@ if(WHISPER_FOUND)
     target_compile_definitions(${PROJECT_NAME} PRIVATE WHISPER_AVAILABLE=1)
 else()
     target_compile_definitions(${PROJECT_NAME} PRIVATE WHISPER_AVAILABLE=0)
+endif()
+
+# We expose the source tree path so the app can default the Whisper model picker and the
+# documentation browser to the project's bundled folders regardless of where the binary runs.
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+    BTHL_SPIRITBOX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# ─── macOS application bundle (.app) ─────────────────────────────────────────
+# We build a proper .app so the Dock/Finder icon and the microphone-permission descriptor
+# (NSMicrophoneUsageDescription, required for Interactive capture mode) are in place.
+if(APPLE)
+    set(APP_ICNS ${CMAKE_SOURCE_DIR}/assets/icons/AppIcon.icns)
+    set_source_files_properties(${APP_ICNS} PROPERTIES MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(${PROJECT_NAME} PRIVATE ${APP_ICNS})
+
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist.in
+        MACOSX_BUNDLE_BUNDLE_NAME "BTHL-SpiritBox"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.beyondthehorizonlabs.spiritbox"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0"
+        MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
+    )
+
+    # We copy the documentation into the bundle so the in-app help browser works from the .app.
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/docs
+            $<TARGET_BUNDLE_DIR:${PROJECT_NAME}>/Contents/Resources/docs
+        COMMENT "Copying documentation into the app bundle")
 endif()
 
 # We link platform-specific audio frameworks on macOS

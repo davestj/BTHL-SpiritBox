@@ -206,6 +206,37 @@ SweepProfile SweepProfile::createFMBroadcast() {
     return profile;
 }
 
+SweepProfile SweepProfile::createAMFMBroadcast() {
+    SweepProfile profile("AM + FM Broadcast");
+    profile.setDescription("We sweep both broadcast bands only — AM (530-1700 kHz) and FM (88-108 MHz). "
+                           "On tuners that cannot reach HF (e.g. E4000, min ~52 MHz) the AM steps are "
+                           "skipped automatically and only FM is scanned.");
+    profile.setDwellTimeMs(30);
+    profile.setAudioSampleRate(48000);
+    profile.setSdrSampleRate(2.4e6);
+    profile.setGain(0.0);
+
+    // We add the AM broadcast band first (low-to-high frequency order)
+    SweepBand amBand;
+    amBand.startFreqHz = 530000.0;      // 530 kHz
+    amBand.stopFreqHz = 1700000.0;      // 1700 kHz
+    amBand.stepSizeHz = 10000.0;        // 10 kHz steps (standard AM channel spacing)
+    amBand.demodMode = DemodulationMode::AM;
+    amBand.bandwidthHz = 10000.0;       // 10 kHz AM bandwidth
+    profile.addBand(amBand);
+
+    // We add the FM broadcast band
+    SweepBand fmBand;
+    fmBand.startFreqHz = 88000000.0;    // 88 MHz
+    fmBand.stopFreqHz = 108000000.0;    // 108 MHz
+    fmBand.stepSizeHz = 200000.0;       // 200 kHz steps (standard FM channel spacing)
+    fmBand.demodMode = DemodulationMode::WFM;
+    fmBand.bandwidthHz = 200000.0;      // 200 kHz FM bandwidth
+    profile.addBand(fmBand);
+
+    return profile;
+}
+
 SweepProfile SweepProfile::createVHFLow() {
     SweepProfile profile("VHF Low Band");
     profile.setDescription("We scan VHF low band (30 MHz - 88 MHz) for non-broadcast signals");
@@ -221,6 +252,32 @@ SweepProfile SweepProfile::createVHFLow() {
     vhfBand.demodMode = DemodulationMode::NFM;
     vhfBand.bandwidthHz = 12500.0;      // 12.5 kHz NFM bandwidth
     profile.addBand(vhfBand);
+
+    return profile;
+}
+
+SweepProfile SweepProfile::createGhostSweep() {
+    // We define a deliberately wide "ghost" sweep that stretches the radio across far more of
+    // the spectrum than the broadcast bands. The SweepEngine auto-skips any steps the connected
+    // tuner cannot physically reach, so on a wideband tuner (e.g. R820T, ~24 MHz–1.7 GHz) this
+    // unlocks the full reachable range, while a limited tuner (E4000) simply scans what it can.
+    SweepProfile profile("Ghost Sweep (device-wide)");
+    profile.setDescription("We rapidly sweep the widest range your tuner supports (auto-clipped to "
+                           "the device's real limits) for spontaneous spirit-box responses.");
+    profile.setDwellTimeMs(15);          // Fast hop — classic rapid spirit-box cadence
+    profile.setAudioSampleRate(16000);
+    profile.setSdrSampleRate(2.4e6);
+    profile.setGain(0.0);
+    profile.setRandomized(true);         // Non-sequential scan of real frequencies
+
+    // We span from HF up through L-band; the engine clips this to the tuner's probed range.
+    SweepBand wide;
+    wide.startFreqHz = 500000.0;         // 500 kHz
+    wide.stopFreqHz = 1700000000.0;      // 1.7 GHz
+    wide.stepSizeHz = 100000.0;          // 100 kHz coarse steps for broad coverage
+    wide.demodMode = DemodulationMode::NFM;
+    wide.bandwidthHz = 12500.0;
+    profile.addBand(wide);
 
     return profile;
 }

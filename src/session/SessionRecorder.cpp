@@ -16,6 +16,7 @@
 #include <QJsonObject>
 #include <QDebug>
 #include <cstring>
+#include <cmath>
 
 namespace bthl::spiritbox {
 
@@ -48,6 +49,7 @@ bool SessionRecorder::startRecording(const QString& sessionDir,
         meta["connected_devices"] = session.connectedDevices;
         meta["app_version"] = "1.0.0";
         meta["platform"] = QSysInfo::prettyProductName();
+        meta["capture_mode"] = m_captureMode;
         metaFile.write(QJsonDocument(meta).toJson(QJsonDocument::Indented));
         metaFile.close();
     }
@@ -65,11 +67,16 @@ bool SessionRecorder::startRecording(const QString& sessionDir,
         m_emfCsvFile->write("timestamp,emf_milligauss,ef_vm,rf_mw_cm2,is_spike\n");
     }
 
-    // We open the continuous audio WAV file
+    // We open the continuous audio WAV file but defer writing the header until the
+    // first audio buffer arrives — only then do we know the true sample rate (which
+    // varies by profile: 48 kHz for FM, 16 kHz for AM/VHF). Writing it eagerly here
+    // would stamp a wrong rate and play the session back at the wrong speed.
     m_audioFile = std::make_unique<QFile>(sessionDir + "/audio_sweep.wav");
-    if (m_audioFile->open(QIODevice::WriteOnly)) {
-        writeWavHeader(*m_audioFile, m_audioSampleRate, 16);
+    if (!m_audioFile->open(QIODevice::WriteOnly)) {
+        qCritical() << "SessionRecorder: We could not open the audio WAV file";
+        return false;
     }
+    m_headerWritten = false;
 
     m_anomalies = QJsonArray();
     m_transcriptions = QJsonArray();
@@ -88,8 +95,14 @@ void SessionRecorder::stopRecording() {
     if (!m_recording) return;
     m_recording = false;
 
-    // We finalize the WAV file with correct size headers
+    // We finalize the WAV file with correct size headers. If no audio ever arrived
+    // (header was deferred and never written), we still emit a valid empty-PCM header
+    // so the file is a well-formed WAV rather than a zero-byte stub.
     if (m_audioFile && m_audioFile->isOpen()) {
+        if (!m_headerWritten) {
+            writeWavHeader(*m_audioFile, m_audioSampleRate, 16);
+            m_headerWritten = true;
+        }
         finalizeWavFile(*m_audioFile);
         m_audioFile->close();
     }
@@ -174,7 +187,14 @@ void SessionRecorder::onAudioSamples(const std::vector<float>& samples,
                                       double /*freqHz*/, uint32_t sampleRate) {
     if (!m_recording || !m_audioFile || !m_audioFile->isOpen()) return;
 
-    m_audioSampleRate = sampleRate;
+    // We write the WAV header on the first buffer, now that we know the true
+    // sample rate of the audio the active profile is actually producing.
+    if (!m_headerWritten) {
+        m_audioSampleRate = sampleRate;
+        writeWavHeader(*m_audioFile, m_audioSampleRate, 16);
+        m_headerWritten = true;
+        qInfo() << "SessionRecorder: We wrote WAV header at" << m_audioSampleRate << "Hz";
+    }
 
     // We convert float samples to int16 for WAV storage
     for (float s : samples) {
@@ -207,6 +227,10 @@ void SessionRecorder::onVoiceDetected(const VoiceDetectionEvent& event) {
 void SessionRecorder::onTranscriptionReady(const TranscriptionResult& result) {
     if (!m_recording) return;
 
+    const QString sourceStr = (result.source == VoiceSource::Investigator)
+                                  ? QStringLiteral("investigator")
+                                  : QStringLiteral("radio_sweep");
+
     QJsonObject obj;
     obj["text"] = result.text;
     obj["timestamp"] = result.timestamp;
@@ -215,6 +239,7 @@ void SessionRecorder::onTranscriptionReady(const TranscriptionResult& result) {
     obj["whisper_probability"] = static_cast<double>(result.whisperProbability);
     obj["language"] = result.language;
     obj["processing_time_ms"] = static_cast<qint64>(result.processingTimeMs);
+    obj["source"] = sourceStr;
     m_transcriptions.append(obj);
 
     QJsonObject event;
@@ -222,17 +247,24 @@ void SessionRecorder::onTranscriptionReady(const TranscriptionResult& result) {
     event["timestamp"] = result.timestamp;
     event["text"] = result.text;
     event["frequency_hz"] = result.frequencyHz;
+    event["source"] = sourceStr;
     writeEventLine(event);
 }
 
 void SessionRecorder::onEMFReading(const EMFReading& reading) {
     if (!m_recording || !m_emfCsvFile || !m_emfCsvFile->isOpen()) return;
 
+    // We leave EF / RF columns empty when the meter does not report them (NaN), rather than
+    // writing a fabricated 0.0 that would read as a real measurement.
+    const QString efStr = std::isnan(reading.efVm)
+                              ? QString() : QString::number(reading.efVm, 'f', 3);
+    const QString rfStr = std::isnan(reading.rfMwCm2)
+                              ? QString() : QString::number(reading.rfMwCm2, 'f', 6);
     QString line = QString("%1,%2,%3,%4,%5\n")
         .arg(reading.timestamp, 0, 'f', 4)
         .arg(reading.emfMilligauss, 0, 'f', 3)
-        .arg(reading.efVm, 0, 'f', 3)
-        .arg(reading.rfMwCm2, 0, 'f', 6)
+        .arg(efStr)
+        .arg(rfStr)
         .arg(reading.isSpike ? 1 : 0);
 
     QByteArray lineBytes = line.toUtf8();

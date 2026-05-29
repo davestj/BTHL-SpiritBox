@@ -1,0 +1,41 @@
+<h1>Sweep Profiles</h1>
+
+<p>A sweep profile defines which frequency bands the SDR scans, the step size, dwell time, and the
+demodulation mode. Pick one from the profile dropdown in the control panel.</p>
+
+<table>
+  <tr><th>Profile</th><th>Range</th><th>Demod</th><th>Notes</th></tr>
+  <tr><td>AM Broadcast</td><td>530–1700 kHz</td><td>AM</td><td>Classic spirit-box band. <strong>Unreachable on E4000 tuners.</strong></td></tr>
+  <tr><td>FM Broadcast</td><td>88–108 MHz</td><td>WFM</td><td>Default. Works on every tuner; lots of stations to sweep.</td></tr>
+  <tr><td>VHF Low Band</td><td>30–88 MHz</td><td>NFM</td><td>Non-broadcast chatter.</td></tr>
+  <tr><td>Full Spectrum</td><td>AM + VHF + FM</td><td>Mixed</td><td>Widest coverage.</td></tr>
+  <tr><td>AM + FM Broadcast</td><td>530 kHz–108 MHz (no VHF)</td><td>AM + WFM</td><td>Both broadcast bands only.</td></tr>
+  <tr><td><strong>Ghost Sweep</strong></td><td>As wide as your tuner allows</td><td>NFM</td><td>Rapid, randomized, device-wide sweep — see below.</td></tr>
+</table>
+
+<h2>Ghost Sweep (device-wide)</h2>
+<p>The <strong>Ghost Sweep</strong> profile stretches the radio across the widest range your
+hardware supports — far beyond the broadcast bands. It sweeps quickly and in a randomized order for
+the classic rapid spirit-box feel. The app automatically <strong>clips it to your tuner's real
+range</strong> (shown in <em>Devices → Device Capabilities</em>): a wideband tuner unlocks a huge
+span, while a limited tuner simply scans what it can reach — no wasted time on unreachable
+frequencies.</p>
+<div class="tip"><b>Best for</b> open-ended "passive listen" watches where you want maximum spectrum
+coverage rather than a specific band.</div>
+
+<div class="warn"><b>E4000 tuners and AM.</b> If your dongle uses the Elonics E4000 tuner (~52 MHz
+floor), any profile that includes the AM band will throw <code>PLL not locked</code> on every AM
+step and skip it. On an E4000, prefer <strong>FM Broadcast</strong> or <strong>VHF Low Band</strong>.
+See <a href="hardware-setup.html">Hardware Setup</a>.</div>
+
+<h2>Dwell time and pacing</h2>
+<p>Dwell time is how long the SDR rests on each frequency before stepping. Shorter dwell =
+faster, choppier sweep; longer dwell = slower, with more audio per channel. The default
+(~30&nbsp;ms) suits most sessions. Adjust with the dwell slider, and remember to leave a
+5–10&nbsp;second listening window after each question regardless of dwell (see the
+<a href="evp-session-templates.html">Session Templates</a>).</p>
+
+<h2>Which profile for EVP?</h2>
+<p><strong>FM Broadcast</strong> is the most reliable starting point — it sweeps a dense band of
+stations on any tuner, producing the rapid fragmentary audio the technique relies on. Experiment
+with AM (on a capable tuner) and VHF once you're comfortable.</p>
