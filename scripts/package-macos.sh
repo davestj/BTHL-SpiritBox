@@ -152,8 +152,8 @@ for bin in "$ROOT"/models/ggml-*.bin; do
     pkgbuild --root "$mpaydir" --install-location "/Applications/BTHL" \
         --identifier "com.beyondthehorizonlabs.spiritbox.model.${name}" --version "$VERSION" "$mcomp"
     # Per-user (home-domain) distribution so the model lands in the same models/ folder as the app.
-    sed -e "s#@COMPONENT@#$(basename "$mcomp")#" -e "s#@ID@#com.beyondthehorizonlabs.spiritbox.model.${name}#" \
-        -e "s#@TITLE@#BTHL-SpiritBox Model: ${name}#" -e "s#@VERSION@#${VERSION}#" \
+    sed -e "s#@COMPONENT@#$(basename "$mcomp")#g" -e "s#@ID@#com.beyondthehorizonlabs.spiritbox.model.${name}#g" \
+        -e "s#@TITLE@#BTHL-SpiritBox Model: ${name}#g" -e "s#@VERSION@#${VERSION}#g" \
         "$ROOT/resources/model-distribution.xml.in" > "$MODEL_DIST"
     productbuild --distribution "$MODEL_DIST" --package-path "$DIST" \
         --sign "$IDENTITY_PKG" --timestamp "$mpkg"
