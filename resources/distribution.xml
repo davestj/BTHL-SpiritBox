@@ -13,8 +13,8 @@
     <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
     <options customize="never" require-scripts="true" hostArchitectures="arm64"/>
 
-    <!-- Custom installer branding (files supplied via productbuild --resources). The postinstall
-         script (in the component pkg) auto-launches the app on completion. -->
+    <!-- Custom installer branding (files supplied through the productbuild resources directory).
+         The postinstall script in the component pkg auto-launches the app on completion. -->
     <background file="installer-bg.png" alignment="bottomleft" scaling="none"/>
     <background-darkAqua file="installer-bg.png" alignment="bottomleft" scaling="none"/>
     <welcome file="welcome.html"/>
