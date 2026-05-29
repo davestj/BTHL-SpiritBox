@@ -47,6 +47,7 @@ find_package(Qt6 REQUIRED COMPONENTS
     Concurrent
     Core
     WebEngineWidgets
+    Network
 )
 
 # SoapySDR - We use the multi-device abstraction layer for SDR hardware
@@ -100,9 +101,15 @@ set(SESSION_SOURCES
     src/session/SessionPlayer.cpp
 )
 
+set(NET_SOURCES
+    src/net/UpdateChecker.cpp
+    src/net/ModelManager.cpp
+)
+
 set(UI_SOURCES
     src/ui/MainWindow.cpp
     src/ui/HelpBrowser.cpp
+    src/ui/ModelManagerDialog.cpp
     src/ui/SweepVisualizerWidget.cpp
     src/ui/EMFTimelineWidget.cpp
     src/ui/AudioWaveformWidget.cpp
@@ -127,6 +134,7 @@ set(ALL_SOURCES
     ${SESSION_SOURCES}
     ${SENSOR_SOURCES}
     ${HUB_SOURCES}
+    ${NET_SOURCES}
     ${UI_SOURCES}
 )
 
@@ -149,6 +157,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt6::Concurrent
     Qt6::Core
     Qt6::WebEngineWidgets
+    Qt6::Network
     SoapySDR
     ${PORTAUDIO_LINK_LIBRARIES}
 )

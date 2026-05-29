@@ -14,6 +14,9 @@
 
 #include "ui/MainWindow.h"
 #include "hub/SensorHub.h"
+#include "ui/ModelManagerDialog.h"
+#include "net/UpdateChecker.h"
+#include <QDesktopServices>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QFormLayout>
@@ -64,7 +67,13 @@ QString resolveDefaultModelDir() {
 
     const QString appDir = QCoreApplication::applicationDirPath();
     const QStringList candidates = {
-        appDir + "/../Resources/models",   // macOS .app bundle (installer places models here)
+        // Primary (shipping layout): the user-writable models/ folder that sits NEXT TO the .app,
+        // i.e. ~/Applications/BTHL/BTHL-SpiritBox/models. It lives outside the signed bundle, so
+        // the in-app downloader can add models without breaking the app signature.
+        appDir + "/../../../models",
+        // User-domain shared store (alternative download target).
+        QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/models",
+        appDir + "/../Resources/models",   // models bundled inside the .app (legacy/all-in-one)
         appDir + "/models",
         appDir + "/../models",             // running from build/
         QStringLiteral(BTHL_SPIRITBOX_SOURCE_DIR) + "/models",
@@ -150,6 +159,10 @@ MainWindow::MainWindow(QWidget* parent)
             onStartSweep();
         }
     });
+
+    /// We quietly check bthlcorp.com for a newer release shortly after launch (only prompts if
+    /// an update is actually available).
+    QTimer::singleShot(4000, this, [this]() { onCheckForUpdates(true); });
 }
 
 MainWindow::~MainWindow() {
@@ -210,10 +223,13 @@ void MainWindow::createMenuBar() {
     auto* whisperMenu = menuBar()->addMenu("&Whisper");
     whisperMenu->addAction("&Load / Switch Model…", this, &MainWindow::onLoadWhisperModel);
     whisperMenu->addAction("&Unload Model", this, &MainWindow::onUnloadWhisperModel);
+    whisperMenu->addSeparator();
+    whisperMenu->addAction("&Download Models…", this, &MainWindow::onDownloadModels);
 
     auto* helpMenu = menuBar()->addMenu("&Help");
     helpMenu->addAction("&Documentation", QKeySequence::HelpContents,
                         this, &MainWindow::onShowDocumentation);
+    helpMenu->addAction("Check for &Updates…", this, [this]() { onCheckForUpdates(false); });
     helpMenu->addSeparator();
     helpMenu->addAction("&About", [this]() {
         QMessageBox::about(this, "About BTHL-SpiritBox",
@@ -899,6 +915,50 @@ void MainWindow::onUnloadWhisperModel() {
     m_loadModelBtn->setEnabled(true);
     m_unloadModelBtn->setEnabled(false);
     statusBar()->showMessage("Whisper model unloaded — transcription paused until you load one.", 4000);
+}
+
+void MainWindow::onDownloadModels() {
+    // We open the model manager pointed at the user-writable models folder (the same folder the
+    // Load Model picker defaults to), so downloaded models appear there immediately.
+    auto* dlg = new ModelManagerDialog(resolveDefaultModelDir(), this);
+    dlg->setAttribute(Qt::WA_DeleteOnClose);
+    connect(dlg, &ModelManagerDialog::modelInstalled, this, [this](const QString& file) {
+        statusBar()->showMessage("Model installed: " + file + " — available in Load Model.", 5000);
+    });
+    dlg->exec();
+}
+
+void MainWindow::onCheckForUpdates(bool silent) {
+    // We query bthlcorp.com for a newer release. `silent` (startup check) suppresses the
+    // "you're up to date" / error popups so it isn't intrusive.
+    auto* checker = new UpdateChecker(this);
+    const QString current = QApplication::applicationVersion();
+
+    connect(checker, &UpdateChecker::updateAvailable, this,
+            [this, checker](const QString& version, const QString& pkgUrl, const QString& notes) {
+                QString body = QString("A new version of BTHL-SpiritBox is available: "
+                                       "<b>%1</b> (you have %2).")
+                                   .arg(version, QApplication::applicationVersion());
+                if (!notes.isEmpty()) body += "<br><br>" + notes.toHtmlEscaped();
+                body += "<br><br>Download and install now?";
+                if (QMessageBox::question(this, "Update Available", body) == QMessageBox::Yes) {
+                    QDesktopServices::openUrl(QUrl(pkgUrl));  // browser downloads the .pkg
+                    statusBar()->showMessage("Downloading update… run the installer when it finishes.", 6000);
+                }
+                checker->deleteLater();
+            });
+    connect(checker, &UpdateChecker::upToDate, this, [this, checker, silent](const QString& v) {
+        if (!silent) QMessageBox::information(this, "Up to Date",
+            "You are running the latest version (" + v + ").");
+        checker->deleteLater();
+    });
+    connect(checker, &UpdateChecker::checkFailed, this, [this, checker, silent](const QString& why) {
+        if (!silent) QMessageBox::warning(this, "Update Check Failed",
+            "We could not check for updates:\n" + why);
+        checker->deleteLater();
+    });
+
+    checker->checkForUpdates(current);
 }
 
 void MainWindow::onCaptureModeChanged(CaptureMode mode) {

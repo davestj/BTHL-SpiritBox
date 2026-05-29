@@ -98,6 +98,10 @@ private slots:
     // ─── Whisper Control ───────────────────────────────────────────────────
     void onLoadWhisperModel();
     void onUnloadWhisperModel();
+    void onDownloadModels();
+
+    // ─── Updates ───────────────────────────────────────────────────────────
+    void onCheckForUpdates(bool silent);
 
     // ─── Capture Modes + Transcript Export + Help ──────────────────────────
     void onCaptureModeChanged(CaptureMode mode);

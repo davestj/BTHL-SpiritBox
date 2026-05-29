@@ -38,7 +38,10 @@ VERSION="1.0.0"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build"
 DIST="$ROOT/dist"
-APP="$BUILD/BTHL-SpiritBox.app"
+BUILD_APP="$BUILD/BTHL-SpiritBox.app"
+# We deploy/sign a STAGING COPY so macdeployqt never embeds Qt frameworks into the dev build
+# (which would make build/ load two sets of Qt and crash on a normal dev run).
+APP="$DIST/stage/BTHL-SpiritBox.app"
 ENTITLEMENTS="$ROOT/resources/entitlements.plist"
 PKG="$DIST/BTHL-SpiritBox-${VERSION}.pkg"
 
@@ -51,7 +54,10 @@ step() { echo ""; echo "━━━ $* ━━━"; }
 step "1/7 Building Release .app"
 cmake -S "$ROOT" -B "$BUILD" -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="/opt/homebrew" >/dev/null
 cmake --build "$BUILD" -j"$(sysctl -n hw.ncpu)"
-[ -d "$APP" ] || { echo "ERROR: $APP not produced"; exit 1; }
+[ -d "$BUILD_APP" ] || { echo "ERROR: $BUILD_APP not produced"; exit 1; }
+# Stage a clean copy to operate on (keeps build/ dev-runnable).
+rm -rf "$DIST/stage"; mkdir -p "$DIST/stage"
+cp -R "$BUILD_APP" "$APP"
 
 # ─── 2. Bundle models ─────────────────────────────────────────────────────────
 step "2/7 Bundling Whisper models into the app"
