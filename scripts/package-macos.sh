@@ -33,10 +33,16 @@ IDENTITY_APP="${IDENTITY_APP:-Developer ID Application: David St John (${TEAM_ID
 IDENTITY_PKG="${IDENTITY_PKG:-Developer ID Installer: David St John (${TEAM_ID})}"
 NOTARY_PROFILE="${NOTARY_PROFILE:-bthl-notary}"
 BUNDLE_ID="com.beyondthehorizonlabs.spiritbox"
-VERSION="1.0.0"
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 BUILD="$ROOT/build"
+# The effective version is computed by CMake (tag-pinned for releases, else auto-incremented build)
+# and written to build/version.txt. We fall back to the CMakeLists baseline before the first build.
+read_version() {
+    if [ -s "$BUILD/version.txt" ]; then cat "$BUILD/version.txt"
+    else grep -m1 -A2 '^project(' "$ROOT/CMakeLists.txt" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1; fi
+}
+VERSION="$(read_version)"
 DIST="$ROOT/dist"
 BUILD_APP="$BUILD/BTHL-SpiritBox.app"
 # We deploy/sign a STAGING COPY so macdeployqt never embeds Qt frameworks into the dev build
@@ -59,23 +65,16 @@ cmake --build "$BUILD" -j"$(sysctl -n hw.ncpu)"
 rm -rf "$DIST/stage"; mkdir -p "$DIST/stage"
 cp -R "$BUILD_APP" "$APP"
 
-# ─── 2. Bundle models ─────────────────────────────────────────────────────────
-step "2/7 Bundling Whisper models into the app"
-if ! ls "$ROOT"/models/*.bin >/dev/null 2>&1; then
-    echo "No models in models/ — fetching them first."
-    "$ROOT/scripts/fetch-models.sh"
-fi
-mkdir -p "$APP/Contents/Resources/models"
-cp -f "$ROOT"/models/*.bin "$APP/Contents/Resources/models/"
-echo "Bundled: $(ls "$APP/Contents/Resources/models" | tr '\n' ' ')"
-
-# ─── 3. macdeployqt ─────────────────────────────────────────────────────────--
-step "3/7 Bundling Qt frameworks (macdeployqt)"
+# ─── 2. macdeployqt ───────────────────────────────────────────────────────────
+# We do NOT bundle models inside the .app. Only the base model ships, and it goes in a sibling
+# models/ folder (outside the signed bundle) so the in-app downloader can add models later
+# without breaking the signature.
+step "2/7 Bundling Qt frameworks (macdeployqt)"
 MACDEPLOYQT="$(command -v macdeployqt || echo /opt/homebrew/bin/macdeployqt)"
 "$MACDEPLOYQT" "$APP" -always-overwrite -no-strip
 
-# ─── 4. Code-sign (hardened runtime, inside-out) ─────────────────────────────
-step "4/7 Code-signing with $IDENTITY_APP"
+# ─── 3. Code-sign (hardened runtime, inside-out) ─────────────────────────────
+step "3/7 Code-signing with $IDENTITY_APP"
 SIGN=(codesign --force --options runtime --timestamp --sign "$IDENTITY_APP")
 # ORDER MATTERS: sign deepest-nested code FIRST so an inner signature never invalidates the
 # seal of a bundle that contains it. The QtWebEngineProcess.app helper lives *inside*
@@ -97,13 +96,31 @@ codesign --force --options runtime --timestamp \
 echo "Verifying signature…"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
-# ─── 5. Build signed .pkg ─────────────────────────────────────────────────────
-step "5/7 Building Developer ID Installer-signed .pkg"
+# ─── 4. Assemble the per-user payload (app + sibling base model) ──────────────
+step "4/7 Assembling install payload (app + base.en in sibling models/)"
+PAYLOAD="$DIST/payload"
+APPROOT="$PAYLOAD/BTHL-SpiritBox"   # becomes ~/Applications/BTHL/BTHL-SpiritBox
+rm -rf "$PAYLOAD"; mkdir -p "$APPROOT/models"
+cp -R "$APP" "$APPROOT/BTHL-SpiritBox.app"
+if [ ! -s "$ROOT/models/ggml-base.en.bin" ]; then
+    echo "base.en missing — fetching models…"; "$ROOT/scripts/fetch-models.sh"
+fi
+cp -f "$ROOT/models/ggml-base.en.bin" "$APPROOT/models/ggml-base.en.bin"
+echo "Payload: BTHL-SpiritBox/{BTHL-SpiritBox.app, models/ggml-base.en.bin}"
+
+# ─── 5. Build the per-user, Installer-signed .pkg ─────────────────────────────
+step "5/7 Building per-user Developer ID Installer-signed .pkg"
 mkdir -p "$DIST"
-productbuild --component "$APP" /Applications \
+COMPONENT="$DIST/BTHL-SpiritBox-component.pkg"
+# Install-location /Applications/BTHL is rebased under the user's home by the currentUserHome
+# domain in distribution.xml → ~/Applications/BTHL/BTHL-SpiritBox/.
+pkgbuild --root "$PAYLOAD" --install-location "/Applications/BTHL" \
+    --identifier "$BUNDLE_ID" --version "$VERSION" "$COMPONENT"
+productbuild --distribution "$ROOT/resources/distribution.xml" \
+    --package-path "$DIST" \
     --sign "$IDENTITY_PKG" --timestamp \
-    --identifier "$BUNDLE_ID" --version "$VERSION" \
     "$PKG"
+rm -f "$COMPONENT"
 echo "Built: $PKG"
 
 # ─── 6. Notarize + staple ─────────────────────────────────────────────────────

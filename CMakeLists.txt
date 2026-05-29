@@ -11,10 +11,48 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(BTHL-SpiritBox
-    VERSION 1.0.0
+    VERSION 1.1.1
     DESCRIPTION "Multi-sensor paranormal audio detection and transcription system"
     LANGUAGES CXX
 )
+# Single source of truth for MAJOR.MINOR: project(VERSION). The third component is the BUILD id.
+#
+# Versioning policy (MAJOR.MINOR.BUILD):
+#   - When HEAD is exactly on a release tag (vX.Y.Z), we PIN the version to that tag — reproducible
+#     release builds, no auto-increment.
+#   - Otherwise (dev build) we AUTO-INCREMENT the build number on every configure, persisted in a
+#     gitignored .build_number file, so each local build is uniquely identifiable.
+# Cut a release with scripts/bump-version.sh (bumps + commits + tags vX.Y.Z).
+find_program(GIT_EXECUTABLE git)
+set(_bthl_on_tag FALSE)
+if(GIT_EXECUTABLE)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} describe --exact-match --tags HEAD
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_VARIABLE _bthl_tag OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE _bthl_tag_rc ERROR_QUIET)
+    if(_bthl_tag_rc EQUAL 0)
+        set(_bthl_on_tag TRUE)
+    endif()
+endif()
+
+if(_bthl_on_tag)
+    string(REGEX REPLACE "^v" "" BTHL_VERSION "${_bthl_tag}")
+    message(STATUS "BTHL-SpiritBox: release build from tag ${_bthl_tag} → version ${BTHL_VERSION}")
+else()
+    set(_bthl_bn_file "${CMAKE_SOURCE_DIR}/.build_number")
+    set(_bthl_bn 0)
+    if(EXISTS "${_bthl_bn_file}")
+        file(READ "${_bthl_bn_file}" _bthl_bn)
+        string(STRIP "${_bthl_bn}" _bthl_bn)
+    endif()
+    math(EXPR _bthl_bn "${_bthl_bn} + 1")
+    file(WRITE "${_bthl_bn_file}" "${_bthl_bn}")
+    set(BTHL_VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${_bthl_bn}")
+    message(STATUS "BTHL-SpiritBox: dev build #${_bthl_bn} → version ${BTHL_VERSION}")
+endif()
+# We expose the effective version so the packaging script (and others) can read it.
+file(WRITE "${CMAKE_BINARY_DIR}/version.txt" "${BTHL_VERSION}")
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -178,7 +216,8 @@ endif()
 # We expose the source tree path so the app can default the Whisper model picker and the
 # documentation browser to the project's bundled folders regardless of where the binary runs.
 target_compile_definitions(${PROJECT_NAME} PRIVATE
-    BTHL_SPIRITBOX_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+    BTHL_SPIRITBOX_SOURCE_DIR="${CMAKE_SOURCE_DIR}"
+    BTHL_SPIRITBOX_VERSION="${BTHL_VERSION}")
 
 # ─── macOS application bundle (.app) ─────────────────────────────────────────
 # We build a proper .app so the Dock/Finder icon and the microphone-permission descriptor
@@ -193,8 +232,8 @@ if(APPLE)
         MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/resources/Info.plist.in
         MACOSX_BUNDLE_BUNDLE_NAME "BTHL-SpiritBox"
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.beyondthehorizonlabs.spiritbox"
-        MACOSX_BUNDLE_BUNDLE_VERSION "1.0.0"
-        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0.0"
+        MACOSX_BUNDLE_BUNDLE_VERSION "${BTHL_VERSION}"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "${BTHL_VERSION}"
         MACOSX_BUNDLE_ICON_FILE "AppIcon.icns"
     )
 

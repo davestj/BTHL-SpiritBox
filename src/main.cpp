@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
 
     QApplication app(argc, argv);
     app.setApplicationName("BTHL-SpiritBox");
-    app.setApplicationVersion("1.0.0");
+    app.setApplicationVersion(QStringLiteral(BTHL_SPIRITBOX_VERSION));
     app.setOrganizationName("Beyond The Horizon Labs");
     app.setOrganizationDomain("beyondthehorizonlabs.com");
     app.setWindowIcon(QIcon(":/icons/icon-512.png"));
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     parser.process(app);
 
     qInfo() << "==================================================";
-    qInfo() << "  BTHL-SpiritBox v1.0.0";
+    qInfo() << "  BTHL-SpiritBox v" BTHL_SPIRITBOX_VERSION;
     qInfo() << "  Paranormal Investigation Command Center";
     qInfo() << "  Beyond The Horizon Labs";
     qInfo() << "  (C) 2026 David St John";

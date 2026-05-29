@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Distribution definition for the per-user BTHL-SpiritBox installer.
+
+  enable_currentUserHome=true + enable_localSystem=false makes this a "install for me only"
+  package: the component's install-location (/Applications/BTHL) is rebased under the user's
+  home, so the app lands at ~/Applications/BTHL/BTHL-SpiritBox/ with no admin password and a
+  user-writable sibling models/ folder the in-app downloader can populate.
+-->
+<installer-gui-script minSpecVersion="2">
+    <title>BTHL-SpiritBox</title>
+    <organization>com.beyondthehorizonlabs</organization>
+    <domains enable_anywhere="false" enable_currentUserHome="true" enable_localSystem="false"/>
+    <options customize="never" require-scripts="false" hostArchitectures="arm64"/>
+
+    <choices-outline>
+        <line choice="default">
+            <line choice="com.beyondthehorizonlabs.spiritbox"/>
+        </line>
+    </choices-outline>
+    <choice id="default"/>
+    <choice id="com.beyondthehorizonlabs.spiritbox" visible="false">
+        <pkg-ref id="com.beyondthehorizonlabs.spiritbox"/>
+    </choice>
+    <pkg-ref id="com.beyondthehorizonlabs.spiritbox" version="1.1.1" onConclusion="none">BTHL-SpiritBox-component.pkg</pkg-ref>
+</installer-gui-script>

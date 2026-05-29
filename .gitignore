@@ -2,6 +2,7 @@
 build/
 build-*/
 cmake-build-*/
+.build_number
 out/
 
 # Qt generated files
