@@ -91,9 +91,32 @@ find_package(Qt6 REQUIRED COMPONENTS
 # SoapySDR - We use the multi-device abstraction layer for SDR hardware
 find_package(SoapySDR REQUIRED)
 
-# PortAudio - We use this for low-latency real-time audio output
-find_package(PkgConfig REQUIRED)
-pkg_check_modules(PORTAUDIO REQUIRED portaudio-2.0)
+# PortAudio - We use this for low-latency real-time audio output.
+# macOS/Linux: pkg-config (portaudio-2.0). Windows/vcpkg: a CMake package config target.
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(PORTAUDIO portaudio-2.0)
+endif()
+if(NOT PORTAUDIO_FOUND)
+    # Fallback for platforms without pkg-config (e.g. Windows via vcpkg, which exports a
+    # `portaudio` CMake target). See docs/WINDOWS_PORT.md for the vcpkg install line.
+    find_package(portaudio CONFIG QUIET)
+    if(TARGET portaudio)
+        set(PORTAUDIO_LINK_LIBRARIES portaudio)
+        set(PORTAUDIO_FOUND TRUE)
+    else()
+        find_path(PORTAUDIO_INCLUDE_DIRS portaudio.h)
+        find_library(PORTAUDIO_LIB NAMES portaudio portaudio_x64 portaudio_static)
+        if(PORTAUDIO_INCLUDE_DIRS AND PORTAUDIO_LIB)
+            set(PORTAUDIO_LINK_LIBRARIES ${PORTAUDIO_LIB})
+            set(PORTAUDIO_FOUND TRUE)
+        endif()
+    endif()
+endif()
+if(NOT PORTAUDIO_FOUND)
+    message(FATAL_ERROR "PortAudio not found. Install it (brew install portaudio / "
+        "apt install portaudio19-dev / vcpkg install portaudio) and re-run CMake.")
+endif()
 
 # whisper.cpp - We build this as a submodule for local speech-to-text
 # Users should clone whisper.cpp into lib/whisper.cpp
@@ -159,8 +182,12 @@ set(SENSOR_SOURCES
     src/sensors/USBDeviceManager.cpp
 )
 # macOS Wi-Fi (CoreWLAN) + Bluetooth-LE (CoreBluetooth) environmental scanner is Obj-C++.
+# Non-Apple platforms (Windows/Linux) link a no-op stub until a native backend is written
+# (see WirelessScanner_stub.cpp and the WINDOWS PORT TODO in docs/WINDOWS_PORT.md).
 if(APPLE)
     list(APPEND SENSOR_SOURCES src/sensors/WirelessScanner.mm)
+else()
+    list(APPEND SENSOR_SOURCES src/sensors/WirelessScanner_stub.cpp)
 endif()
 
 set(HUB_SOURCES
@@ -265,6 +292,42 @@ if(APPLE)
         ${COREBLUETOOTH_LIB}
         ${FOUNDATION_LIB}
     )
+endif()
+
+# ─── Windows executable, icon, and Qt deployment ─────────────────────────────
+# We build a GUI-subsystem .exe (no console window), embed the app icon + version info via a
+# configured .rc, link Qt's WinMain entry point, and run windeployqt after the build so the .exe
+# is runnable from its own folder. This is the groundwork for the Windows port; see
+# docs/WINDOWS_PORT.md for dependency setup (vcpkg/PothosSDR) and remaining platform TODOs.
+if(WIN32)
+    enable_language(RC)
+    set(SB_RC "${CMAKE_BINARY_DIR}/spiritbox.rc")
+    configure_file(${CMAKE_SOURCE_DIR}/resources/windows/spiritbox.rc.in "${SB_RC}" @ONLY)
+    target_sources(${PROJECT_NAME} PRIVATE "${SB_RC}")
+
+    # GUI app (suppress the console) + Qt's WinMain shim so main() is found by the linker.
+    set_target_properties(${PROJECT_NAME} PROPERTIES WIN32_EXECUTABLE ON)
+    target_link_libraries(${PROJECT_NAME} PRIVATE Qt6::EntryPoint)
+
+    # Stage the Qt runtime (DLLs, plugins, QtWebEngine helper) next to the .exe.
+    get_target_property(_qt_qmake Qt6::qmake IMPORTED_LOCATION)
+    get_filename_component(_qt_bin "${_qt_qmake}" DIRECTORY)
+    find_program(WINDEPLOYQT_EXECUTABLE windeployqt HINTS "${_qt_bin}")
+    if(WINDEPLOYQT_EXECUTABLE)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND "${WINDEPLOYQT_EXECUTABLE}" --no-translations --no-compiler-runtime
+                    "$<TARGET_FILE:${PROJECT_NAME}>"
+            COMMENT "Deploying Qt runtime next to the .exe (windeployqt)")
+    else()
+        message(WARNING "windeployqt not found — the .exe will need Qt DLLs on PATH to run.")
+    endif()
+
+    # Copy the documentation next to the .exe so the in-app help browser resolves it at runtime
+    # (mirrors the macOS bundle copy; the docs resolver also probes the exe directory).
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_SOURCE_DIR}/docs $<TARGET_FILE_DIR:${PROJECT_NAME}>/docs
+        COMMENT "Copying documentation next to the .exe")
 endif()
 
 # ─── Install ────────────────────────────────────────────────────────────────
