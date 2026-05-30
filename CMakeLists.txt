@@ -11,7 +11,7 @@
 cmake_minimum_required(VERSION 3.21)
 
 project(BTHL-SpiritBox
-    VERSION 1.1.2
+    VERSION 1.2.0
     DESCRIPTION "Multi-sensor paranormal audio detection and transcription system"
     LANGUAGES CXX
 )

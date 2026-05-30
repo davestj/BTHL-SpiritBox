@@ -492,6 +492,20 @@ void MainWindow::createTranscriptionDock() {
     connect(m_saveTranscriptBtn, &QPushButton::clicked, this, &MainWindow::onSaveTranscript);
     controls->addWidget(m_saveTranscriptBtn);
 
+    // We surface the model downloader and the update check as first-class buttons here (they
+    // also live in the Whisper / Help menus). Most investigators never open the menu bar, so the
+    // "get more models" and "stay current" actions need to be visible right where models are loaded.
+    m_downloadModelsBtn = new QPushButton("Download Models...");
+    m_downloadModelsBtn->setToolTip("Browse and download additional Whisper models from BTHL");
+    connect(m_downloadModelsBtn, &QPushButton::clicked, this, &MainWindow::onDownloadModels);
+    controls->addWidget(m_downloadModelsBtn);
+
+    m_checkUpdatesBtn = new QPushButton("Check for Updates...");
+    m_checkUpdatesBtn->setToolTip("Check beyondthehorizonlabs.com for a newer SpiritBox release");
+    connect(m_checkUpdatesBtn, &QPushButton::clicked, this,
+            [this]() { onCheckForUpdates(false); });
+    controls->addWidget(m_checkUpdatesBtn);
+
     layout->addLayout(controls);
 
     // ─── Capture-mode selector ─────────────────────────────────────────────

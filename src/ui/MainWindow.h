@@ -172,6 +172,8 @@ private:
     QPushButton* m_loadModelBtn{nullptr};
     QPushButton* m_unloadModelBtn{nullptr};
     QPushButton* m_saveTranscriptBtn{nullptr};
+    QPushButton* m_downloadModelsBtn{nullptr};
+    QPushButton* m_checkUpdatesBtn{nullptr};
 
     // ─── Capture Mode selector ─────────────────────────────────────────────
     QButtonGroup* m_modeGroup{nullptr};
