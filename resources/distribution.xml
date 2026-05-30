@@ -30,5 +30,5 @@
     <choice id="com.beyondthehorizonlabs.spiritbox" visible="false">
         <pkg-ref id="com.beyondthehorizonlabs.spiritbox"/>
     </choice>
-    <pkg-ref id="com.beyondthehorizonlabs.spiritbox" version="1.1.2" onConclusion="none">BTHL-SpiritBox-component.pkg</pkg-ref>
+    <pkg-ref id="com.beyondthehorizonlabs.spiritbox" version="1.2.0" onConclusion="none">BTHL-SpiritBox-component.pkg</pkg-ref>
 </installer-gui-script>
