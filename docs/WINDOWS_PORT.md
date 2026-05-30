@@ -25,8 +25,9 @@ only on non-Apple platforms. Clone this branch on your Windows machine and follo
 - **`resources/windows/spiritbox.rc.in`** — embeds `assets/icons/app.ico` + version metadata.
 - **`scripts/build-windows.ps1`** / **`scripts/package-windows.ps1`** — one-command configure+build
   and a portable-zip packager.
-- Generated raster assets (`app.ico`, `icon-512.png`, `splash.png`) are committed on this branch so
-  a fresh clone builds without the rasterization toolchain (rsvg/ImageMagick).
+- Generated raster assets (`app.ico`, `icon-512.png`, `splash.png`) are **not** committed — they are
+  rebuilt from the SVG sources at build time. `scripts/build-windows.ps1` runs the generator
+  (`assets/branding/generate-assets.sh`) automatically when they're missing.
 
 ---
 
@@ -40,6 +41,7 @@ only on non-Apple platforms. Clone this branch on your Windows machine and follo
 | **Git** | for the clone + whisper.cpp submodule |
 | **Qt 6.x for MSVC** (with **Qt WebEngine**) | official online installer or `aqtinstall`. Needs Widgets, Multimedia, SerialPort, Charts, Concurrent, Network, **WebEngineWidgets** |
 | **vcpkg** | for SoapySDR + PortAudio (or use PothosSDR for the SDR stack — see below) |
+| **Git Bash + librsvg + ImageMagick** | for build-time branding art generation (`rsvg-convert`, `magick`). `build-windows.ps1` invokes `generate-assets.sh` to produce `icon-512.png`, `splash.png`, `app.ico` if absent. Install ImageMagick (with the SVG/rsvg delegate); `bash` comes with Git for Windows. |
 
 ### Dependencies via vcpkg
 ```powershell

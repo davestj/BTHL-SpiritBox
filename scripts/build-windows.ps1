@@ -52,6 +52,32 @@ if (-not $QtDir) {
 }
 Write-Host "  Qt        : $QtDir"
 
+# --- Ensure generated branding art exists ------------------------------------
+# We keep generated rasters OUT of git and regenerate them from the SVG sources at build time:
+# icon-512.png + splash.png (compiled into the .qrc) and app.ico (embedded by the .rc).
+# The generator is the shared assets/branding/generate-assets.sh (needs Git Bash + librsvg +
+# ImageMagick on Windows; the macOS-only .icns step is skipped automatically). See WINDOWS_PORT.md.
+$needArt = @(
+    (Join-Path $Root 'assets\icons\icon-512.png'),
+    (Join-Path $Root 'assets\branding\splash.png'),
+    (Join-Path $Root 'assets\icons\app.ico')
+)
+if ($needArt | Where-Object { -not (Test-Path $_) }) {
+    Write-Host "`n-- Generating branding assets (missing) --" -ForegroundColor Cyan
+    $bash = Get-Command bash.exe -ErrorAction SilentlyContinue
+    if (-not $bash) {
+        throw "Branding assets are missing and 'bash' was not found. Install Git for Windows, plus " +
+              "librsvg (rsvg-convert) and ImageMagick (magick) on PATH, then re-run. Generator: " +
+              "assets\branding\generate-assets.sh (see docs\WINDOWS_PORT.md)."
+    }
+    & $bash.Source (Join-Path $Root 'assets\branding\generate-assets.sh')
+    if ($LASTEXITCODE -ne 0) {
+        throw "generate-assets.sh failed. Ensure rsvg-convert and magick (ImageMagick) are on PATH."
+    }
+} else {
+    Write-Host "  Assets    : present"
+}
+
 # --- CMake args --------------------------------------------------------------
 $cmakeArgs = @(
     '-S', $Root, '-B', $Build,
